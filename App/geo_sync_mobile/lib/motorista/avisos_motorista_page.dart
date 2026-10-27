@@ -1,11 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:mobile/motorista/sincronizacao_widgets.dart' show tempoRelativo;
 import 'package:mobile/services/api_exception.dart';
 import 'package:mobile/services/api_service.dart';
-import 'package:mobile/services/notification_center.dart';
 import 'package:mobile/widgets/app_gradient_header.dart';
 import 'package:mobile/widgets/responsive_content.dart';
 
@@ -41,7 +37,7 @@ class _AvisosMotoristaPageState extends State<AvisosMotoristaPage> {
       setState(() {
         _avisos = response
             .whereType<Map>()
-            .map((a) => Map<String, dynamic>.from(a))
+            .map((aviso) => Map<String, dynamic>.from(aviso))
             .toList();
         _loading = false;
       });
@@ -54,105 +50,47 @@ class _AvisosMotoristaPageState extends State<AvisosMotoristaPage> {
     }
   }
 
-  bool _read(Map<String, dynamic> aviso) =>
-      aviso['lido'] == true ||
-      aviso['read'] == true ||
-      aviso['read_at'] != null;
-
-  Future<void> _readOne(Map<String, dynamic> aviso) async {
-    if (_read(aviso) || aviso['id'] == null) return;
-    setState(() => aviso['lido'] = true);
-    try {
-      await ApiService.instance.marcarAvisoComoLido(aviso['id']);
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      setState(() => aviso['lido'] = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    } finally {
-      unawaited(AppNotificationCenter.instance.refreshNow());
-    }
-  }
-
-  Future<void> _readAll() async {
-    setState(() {
-      for (final aviso in _avisos) {
-        aviso['lido'] = true;
-      }
-    });
-    try {
-      await ApiService.instance.marcarTodosAvisosComoLidos();
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      await _load(refresh: true);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
-      }
-    } finally {
-      unawaited(AppNotificationCenter.instance.refreshNow());
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final unread = _avisos.where((a) => !_read(a)).length;
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
             AppGradientHeader(
               title: 'Avisos',
-              subtitle: unread > 0
-                  ? '$unread aviso${unread == 1 ? '' : 's'} não lido${unread == 1 ? '' : 's'}'
-                  : 'Você está em dia',
+              subtitle: _avisos.isEmpty
+                  ? 'Acompanhe atualizações das suas entregas'
+                  : _avisos.length == 1
+                  ? '1 atualização das suas remessas'
+                  : '${_avisos.length} atualizações das suas remessas',
               icon: LucideIcons.bell,
-              actions: [
-                if (_avisos.isNotEmpty)
-                  Material(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: unread == 0 ? null : _readAll,
-                      child: Tooltip(
-                        message: 'Marcar todos como lidos',
-                        child: SizedBox.square(
-                          dimension: 48,
-                          child: Icon(
-                            LucideIcons.checkCheck,
-                            color: Colors.white.withValues(
-                              alpha: unread == 0 ? 0.45 : 1,
-                            ),
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
             ),
             Expanded(
               child: ResponsiveContent(
                 child: RefreshIndicator(
-                  onRefresh: () async {
-                    await _load(refresh: true);
-                    await AppNotificationCenter.instance.refreshNow();
-                  },
+                  onRefresh: () => _load(refresh: true),
                   child: _loading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? Center(
+                          child: CircularProgressIndicator(
+                            color: scheme.primary,
+                          ),
+                        )
                       : _error != null
                       ? ListView(
-                          padding: const EdgeInsets.all(24),
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(22),
                           children: [
-                            const SizedBox(height: 32),
-                            const Icon(LucideIcons.cloudOff, size: 48),
-                            const SizedBox(height: 12),
-                            Text(_error!, textAlign: TextAlign.center),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 70),
+                            _emptyState(
+                              context,
+                              icon: LucideIcons.cloudOff,
+                              title: 'Não foi possível carregar',
+                              message: _error!,
+                            ),
+                            const SizedBox(height: 20),
                             Center(
                               child: FilledButton.icon(
                                 onPressed: () => _load(refresh: true),
@@ -163,16 +101,69 @@ class _AvisosMotoristaPageState extends State<AvisosMotoristaPage> {
                           ],
                         )
                       : ListView(
-                          padding: const EdgeInsets.all(16),
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(18, 22, 18, 30),
                           children: [
                             if (_avisos.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 48),
-                                child: Center(
-                                  child: Text('Não há avisos no momento.'),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 66),
+                                child: _emptyState(
+                                  context,
+                                  icon: LucideIcons.bellOff,
+                                  title: 'Tudo tranquilo por aqui',
+                                  message:
+                                      'Quando houver uma atualização sobre suas remessas, ela aparecerá nesta tela.',
+                                ),
+                              )
+                            else ...[
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 20),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 15,
+                                  vertical: 13,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: scheme.primary.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: scheme.primary.withValues(alpha: 0.10),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      LucideIcons.bellRing,
+                                      color: scheme.primary,
+                                      size: 19,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Atualizações das suas remessas',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              color: scheme.onSurface,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${_avisos.length}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            color: scheme.primary,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ..._avisos.map(_card),
+                              ..._avisos.map(_card),
+                            ],
                           ],
                         ),
                 ),
@@ -184,49 +175,177 @@ class _AvisosMotoristaPageState extends State<AvisosMotoristaPage> {
     );
   }
 
-  Widget _card(Map<String, dynamic> aviso) {
-    final read = _read(aviso);
-    final title = '${aviso['titulo'] ?? aviso['title'] ?? 'Aviso'}';
-    final message =
-        '${aviso['descricao'] ?? aviso['message'] ?? aviso['mensagem'] ?? ''}';
-    final bruta = '${aviso['created_at'] ?? aviso['data'] ?? ''}';
-    final data = DateTime.tryParse(bruta);
-    final date = data == null ? bruta : tempoRelativo(data.toLocal());
-    return Card(
-      color: read ? null : _primary.withValues(alpha: 0.06),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: read ? Colors.transparent : _primary.withValues(alpha: 0.35),
+  Widget _emptyState(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        Container(
+          width: 82,
+          height: 82,
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.08),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 34, color: scheme.primary),
         ),
-      ),
-      child: ListTile(
-        onTap: () => _readOne(aviso),
-        leading: CircleAvatar(
-          backgroundColor: _primary.withValues(alpha: .12),
-          child: const Icon(LucideIcons.bell, color: _primary),
-        ),
-        title: Text(
+        const SizedBox(height: 18),
+        Text(
           title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontWeight: read ? FontWeight.w500 : FontWeight.w800,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
           ),
         ),
-        subtitle: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
-        trailing: read
-            ? ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 72),
-                child: Text(
-                  date,
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11),
-                ),
-              )
-            : const Badge(smallSize: 9),
+        const SizedBox(height: 8),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _card(Map<String, dynamic> aviso) {
+    final remessa = aviso['remessa'] is Map
+        ? Map<String, dynamic>.from(aviso['remessa'] as Map)
+        : <String, dynamic>{};
+    final tipo = aviso['titulo'] ?? aviso['title'] ?? aviso['tipo'] ?? 'Aviso';
+    final mensagem =
+        aviso['descricao'] ?? aviso['message'] ?? aviso['mensagem'] ?? '';
+    final codigo = remessa['codigo_rastreio'] ?? remessa['codigo'];
+    final detalhes = '$mensagem'.trim();
+    final data = DateTime.tryParse(
+      '${aviso['created_at'] ?? aviso['data'] ?? ''}',
+    )?.toLocal();
+    final tipoNormalizado = '$tipo'.toLowerCase();
+    final critico = tipoNormalizado.contains('atras') ||
+        tipoNormalizado.contains('problema') ||
+        tipoNormalizado.contains('ocorr');
+    final entregue = tipoNormalizado.contains('entreg');
+    final proximidade = tipoNormalizado.contains('proxim') ||
+        tipoNormalizado.contains('destino');
+    final cor = critico
+        ? const Color(0xFFDC2626)
+        : entregue
+        ? const Color(0xFF059669)
+        : proximidade
+        ? const Color(0xFF7C3AED)
+        : _primary;
+    final icone = critico
+        ? LucideIcons.triangleAlert
+        : entregue
+        ? LucideIcons.badgeCheck
+        : proximidade
+        ? LucideIcons.mapPin
+        : LucideIcons.bellRing;
+    final horario = data == null
+        ? null
+        : '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')} · ${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}';
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.65)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: cor.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Icon(icone, color: cor, size: 21),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 190),
+                        child: Text(
+                          '$tipo',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      if (horario != null)
+                        Text(
+                          horario,
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    detalhes.isEmpty ? 'Sem descrição.' : detalhes,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                  if (codigo != null && '$codigo'.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Text(
+                        'REMESSA  $codigo',
+                        style: TextStyle(
+                          color: cor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

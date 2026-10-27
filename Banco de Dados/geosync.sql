@@ -18,6 +18,25 @@
 		updated_at TIMESTAMP NULL
 	);
 
+	-- Documentos enviados por motoristas para análise administrativa.
+	CREATE TABLE motorista_documentos (
+		id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+		user_id BIGINT UNSIGNED NOT NULL,
+		tipo ENUM('cnh', 'crlv') NOT NULL,
+		arquivo_path VARCHAR(255) NOT NULL,
+		arquivo_mime VARCHAR(100) NOT NULL,
+		arquivo_nome VARCHAR(255) NOT NULL,
+		validade DATE NULL,
+		status VARCHAR(20) NOT NULL DEFAULT 'pendente',
+		motivo_reprovacao TEXT NULL,
+		analisado_em TIMESTAMP NULL,
+		created_at TIMESTAMP NULL,
+		updated_at TIMESTAMP NULL,
+		UNIQUE KEY motorista_documentos_user_tipo_unique (user_id, tipo),
+		INDEX motorista_documentos_status_created_idx (status, created_at),
+		CONSTRAINT fk_motorista_documentos_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+
 	-- 2. TABELA DE TOKENS DA API (Laravel Sanctum)
 	CREATE TABLE personal_access_tokens (
 		id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

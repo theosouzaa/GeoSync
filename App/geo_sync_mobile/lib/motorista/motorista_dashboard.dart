@@ -664,11 +664,41 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
             documento['document_type'],
       );
       if (tipoDocumento == tipo || tipoDocumento.contains(tipo)) {
+        final validade = _campoApi(documento, [
+          'validade',
+          'validade_$tipo',
+          '${tipo}_validade',
+          'data_validade_$tipo',
+        ]);
+        var dataValidade = DateTime.tryParse(validade);
+        if (dataValidade == null) {
+          final partes = validade.split(RegExp(r'[/.-]'));
+          if (partes.length == 3) {
+            final dia = int.tryParse(partes[0]);
+            final mes = int.tryParse(partes[1]);
+            final ano = int.tryParse(partes[2]);
+            if (dia != null && mes != null && ano != null && ano >= 1000) {
+              dataValidade = DateTime(ano, mes, dia);
+            }
+          }
+        }
+        if (dataValidade != null) {
+          final hoje = DateTime.now();
+          if (DateTime(dataValidade.year, dataValidade.month, dataValidade.day)
+              .isBefore(DateTime(hoje.year, hoje.month, hoje.day))) {
+            return 'Vencido';
+          }
+        }
         final status = _campoApi(documento, [
           'status',
           'situacao',
           'status_documento',
         ]);
+        if ({'aprovado', 'approved', 'valid', 'valido'}
+                .contains(_normalizarStatus(status)) &&
+            validade.isEmpty) {
+          return 'Validade pendente';
+        }
         if (status.isNotEmpty) return status;
       }
     }

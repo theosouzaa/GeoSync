@@ -647,29 +647,9 @@ class ApiService {
 
   /// Avisos específicos do motorista. O backend deve retornar uma lista em
   /// `data` ou diretamente, com id, titulo, descricao, lido e created_at.
-  Future<List<dynamic>> avisosMotorista({bool forceRefresh = false}) async {
-    if (!forceRefresh && _cacheValido(_alertasCacheAt, _alertasCache)) {
-      return List<dynamic>.from(_alertasCache!);
-    }
-    final avisos = _list(
-      await _request('GET', 'motorista/avisos', authenticated: true),
-    );
-    _alertasCache = List<dynamic>.from(avisos);
-    _alertasCacheAt = DateTime.now();
-    return avisos;
-  }
-
-  Future<void> marcarAvisoComoLido(Object id) async {
-    await _request('PATCH', 'motorista/avisos/$id/lido', authenticated: true);
-    _alertasCache = null;
-    _alertasCacheAt = null;
-  }
-
-  Future<void> marcarTodosAvisosComoLidos() async {
-    await _request('PATCH', 'motorista/avisos/lidos', authenticated: true);
-    _alertasCache = null;
-    _alertasCacheAt = null;
-  }
+  /// Lista alertas associados Ã s remessas do motorista autenticado.
+  Future<List<dynamic>> avisosMotorista({bool forceRefresh = false}) async =>
+      alertas(forceRefresh: forceRefresh);
 
   /// Envia CNH ou CRLV em multipart/form-data.
   Future<Map<String, dynamic>> enviarDocumentoMotorista({

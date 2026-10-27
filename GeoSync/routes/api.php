@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ContatoControllerApi;
 use App\Http\Controllers\Api\PagamentoControllerApi;
 use App\Http\Controllers\Api\RemessaControllerApi;
 use App\Http\Controllers\Api\LocalizacaoControllerApi;
+use App\Http\Controllers\Api\MotoristaDocumentoControllerApi;
 
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthControllerApi::class, 'register']);
@@ -22,6 +23,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('auth/me', [AuthControllerApi::class, 'me']);
     Route::post('auth/logout', [AuthControllerApi::class, 'logout']);
     Route::put('perfil', [AuthControllerApi::class, 'updateProfile']);
+
+    Route::get('motorista/documentos', [MotoristaDocumentoControllerApi::class, 'index']);
+    Route::post('motorista/documentos/{tipo}', [MotoristaDocumentoControllerApi::class, 'store']);
+    Route::get('admin/motorista-documentos', [MotoristaDocumentoControllerApi::class, 'adminIndex']);
+    Route::get('admin/motorista-documentos/{documento}/arquivo', [MotoristaDocumentoControllerApi::class, 'arquivo']);
+    Route::patch('admin/motorista-documentos/{documento}', [MotoristaDocumentoControllerApi::class, 'revisar']);
 
     Route::get('remessas/minhas', [RemessaControllerApi::class, 'minhas']);
     Route::get('remessas/disponiveis', [RemessaControllerApi::class, 'disponiveis']);
