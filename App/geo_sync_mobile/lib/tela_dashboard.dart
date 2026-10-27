@@ -4,6 +4,10 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:mobile/widgets/adaptive_grid.dart';
 import 'package:mobile/app_session.dart';
+import 'package:mobile/core/avaliacao_repository.dart';
+import 'package:mobile/core/alerta_repository.dart';
+import 'package:mobile/core/pagamento_repository.dart';
+import 'package:mobile/core/remessa_repository.dart';
 
 import 'package:mobile/perfil_page.dart';
 import 'package:mobile/remessa_page.dart' hide RemessaCard;
@@ -24,6 +28,10 @@ class TelaDashboard extends StatefulWidget {
 }
 
 class _TelaDashboardState extends State<TelaDashboard> {
+  final AlertaRepository _alertaRepository = AlertaRepository();
+  final RemessaRepository _remessaRepository = RemessaRepository();
+  final PagamentoRepository _pagamentoRepository = PagamentoRepository();
+  final AvaliacaoRepository _avaliacaoRepository = AvaliacaoRepository();
   int _currentIndex = 0;
 
   static const Color primary = Color(0xFF0C46FF);
@@ -93,7 +101,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
       if (!mounted) return;
       AppNotificationCenter.instance.attach(
         context,
-        fetch: () => ApiService.instance.alertas(),
+        fetch: () => _alertaRepository.listar(),
       );
     });
   }
@@ -143,7 +151,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
   Future<List<Remessa>> _carregarRemessas() async {
     try {
       // A API decide quais remessas pertencem à sessão autenticada.
-      final dados = await ApiService.instance.remessasAutorizadas();
+      final dados = await _remessaRepository.autorizadas();
       _falhaRemessas = false;
       return dados.whereType<Map>().map((value) {
         final status =
@@ -174,7 +182,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
 
   Future<List<Alerta>> _carregarAlertas() async {
     try {
-      final dados = await ApiService.instance.alertas();
+      final dados = await _alertaRepository.listar();
       return dados.whereType<Map>().map((value) {
         return Alerta(
           id: value['id'],
@@ -201,7 +209,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
 
   Future<double?> _carregarSaldo() async {
     try {
-      final pagamentos = await ApiService.instance.pagamentos();
+      final pagamentos = await _pagamentoRepository.listar();
       return pagamentos.whereType<Map>().fold<double>(0, (total, item) {
         final raw = item['valor'] ?? item['amount'];
         if (raw == null) return total;
@@ -220,7 +228,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
 
   Future<double?> _carregarAvaliacao() async {
     try {
-      final resumo = await ApiService.instance.resumoAvaliacoes();
+      final resumo = await _avaliacaoRepository.resumo();
       final media =
           resumo['media'] ??
           resumo['average'] ??
@@ -231,7 +239,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
       if (valor != null) return valor;
     } catch (_) {}
     try {
-      final avaliacoes = await ApiService.instance.avaliacoes();
+      final avaliacoes = await _avaliacaoRepository.listar();
       final notas = avaliacoes
           .whereType<Map>()
           .map((item) {
@@ -1726,12 +1734,14 @@ class _TelaDashboardState extends State<TelaDashboard> {
 
           Row(
             children: [
-              Text(
-                "Progresso pela etapa",
-                style: TextStyle(color: textLight, fontSize: 9),
+              Expanded(
+                child: Text(
+                  "Progresso pela etapa",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: textLight, fontSize: 9),
+                ),
               ),
-
-              const Spacer(),
 
               Text(
                 "${(progress * 100).round()}%",

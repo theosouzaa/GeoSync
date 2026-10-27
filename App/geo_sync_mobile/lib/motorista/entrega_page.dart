@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
 import 'package:image_picker/image_picker.dart';
+import 'package:mobile/core/remessa_repository.dart';
 import 'package:mobile/services/api_exception.dart';
-import 'package:mobile/services/api_service.dart';
 import 'package:mobile/services/eta_service.dart';
 import 'package:mobile/services/shipment_progress.dart';
 import 'package:mobile/app_session.dart';
@@ -34,6 +34,7 @@ class RemessasPage extends StatefulWidget {
 }
 
 class _RemessasPageState extends State<RemessasPage> {
+  final RemessaRepository _remessaRepository = RemessaRepository();
   final TextEditingController _searchController = TextEditingController();
 
   String filtroSelecionado = "Todas";
@@ -211,7 +212,7 @@ class _RemessasPageState extends State<RemessasPage> {
     String? erroDisponiveis;
 
     try {
-      dados = (await ApiService.instance.minhasRemessas(
+      dados = (await _remessaRepository.minhas(
         forceRefresh: forceRefresh,
       )).whereType<Map>().map(_remessaFromApi).toList();
     } on ApiException catch (error) {
@@ -221,7 +222,7 @@ class _RemessasPageState extends State<RemessasPage> {
     }
 
     try {
-      vagas = (await ApiService.instance.remessasDisponiveis())
+      vagas = (await _remessaRepository.disponiveis())
           .whereType<Map>()
           .map((item) => _remessaFromApi(item, disponivel: true))
           .toList();
@@ -1998,6 +1999,7 @@ class _SincronizacaoDaEntregaState extends State<_SincronizacaoDaEntrega> {
 }
 
 class _DetalhesRemessaState extends State<DetalhesRemessa> {
+  final RemessaRepository _remessaRepository = RemessaRepository();
   Remessa get remessa => widget.remessa;
   bool _atualizandoStatus = false;
   Timer? _timerProgresso;
@@ -2018,9 +2020,7 @@ class _DetalhesRemessaState extends State<DetalhesRemessa> {
 
   Future<void> _atualizarProgresso() async {
     try {
-      final itens = await ApiService.instance.minhasRemessas(
-        forceRefresh: true,
-      );
+      final itens = await RemessaRepository().minhas(forceRefresh: true);
       final id = '${remessa.id ?? remessa.codigo}';
       Map? atual;
       for (final item in itens.whereType<Map>()) {
@@ -2115,7 +2115,7 @@ class _DetalhesRemessaState extends State<DetalhesRemessa> {
 
   Future<latlong2.LatLng?> _obterLocalizacaoAtual() async {
     try {
-      final dados = await ApiService.instance.ultimaLocalizacaoPorRemessa(
+      final dados = await _remessaRepository.ultimaLocalizacao(
         remessa.id ?? remessa.codigo,
       );
       final latitude = double.tryParse('${dados['latitude'] ?? dados['lat']}');
@@ -2267,7 +2267,7 @@ class _DetalhesRemessaState extends State<DetalhesRemessa> {
     if (localizacao == null) return;
 
     try {
-      final resposta = await ApiService.instance.registrarOcorrenciaRemessa(
+      final resposta = await _remessaRepository.registrarOcorrencia(
         remessa.id ?? remessa.codigo,
         descricao: descricao,
         categoria: '${resultado['categoria']}',
@@ -2309,17 +2309,16 @@ class _DetalhesRemessaState extends State<DetalhesRemessa> {
 
     setState(() => _atualizandoStatus = true);
     try {
-      final respostaComprovante = await ApiService.instance
-          .registrarComprovanteEntrega(
-            remessa.id ?? remessa.codigo,
-            destinatario: prova.destinatario,
-            assinaturaBase64: prova.assinaturaBase64,
-            fotoBase64: prova.fotoBase64,
-            observacao: prova.observacao,
-            latitude: localizacao.latitude,
-            longitude: localizacao.longitude,
-          );
-      final respostaStatus = await ApiService.instance.atualizarStatusRemessa(
+      final respostaComprovante = await _remessaRepository.registrarComprovante(
+        remessa.id ?? remessa.codigo,
+        destinatario: prova.destinatario,
+        assinaturaBase64: prova.assinaturaBase64,
+        fotoBase64: prova.fotoBase64,
+        observacao: prova.observacao,
+        latitude: localizacao.latitude,
+        longitude: localizacao.longitude,
+      );
+      final respostaStatus = await _remessaRepository.atualizarStatus(
         remessa.id ?? remessa.codigo,
         'Entregue',
       );
@@ -2364,7 +2363,7 @@ class _DetalhesRemessaState extends State<DetalhesRemessa> {
     if (_atualizandoStatus) return;
     setState(() => _atualizandoStatus = true);
     try {
-      final resposta = await ApiService.instance.aceitarRemessa(
+      final resposta = await _remessaRepository.aceitar(
         remessa.id ?? remessa.codigo,
       );
       if (!mounted) return;
@@ -2442,7 +2441,7 @@ class _DetalhesRemessaState extends State<DetalhesRemessa> {
     }
     setState(() => _atualizandoStatus = true);
     try {
-      final resposta = await ApiService.instance.atualizarStatusRemessa(
+      final resposta = await _remessaRepository.atualizarStatus(
         remessa.id ?? remessa.codigo,
         proximo,
       );
@@ -2928,7 +2927,7 @@ class _DetalhesRemessaState extends State<DetalhesRemessa> {
   }
 
   Widget _historicoEntrega() => FutureBuilder<List<dynamic>>(
-    future: ApiService.instance.historicoRemessa(remessa.id ?? remessa.codigo),
+    future: _remessaRepository.historico(remessa.id ?? remessa.codigo),
     builder: (context, snapshot) {
       final eventos = snapshot.data?.whereType<Map>().toList() ?? const <Map>[];
       return Column(

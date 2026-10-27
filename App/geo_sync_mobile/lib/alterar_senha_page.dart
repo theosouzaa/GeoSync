@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:mobile/core/perfil_repository.dart';
 import 'package:mobile/services/api_exception.dart';
-import 'package:mobile/services/api_service.dart';
 import 'package:mobile/widgets/app_gradient_header.dart';
 import 'package:mobile/widgets/form_widgets.dart';
 
@@ -43,6 +43,7 @@ class _AlterarSenhaPageState extends State<AlterarSenhaPage> {
     ),
   ];
 
+  final PerfilRepository _perfilRepository = PerfilRepository();
   final _formKey = GlobalKey<FormState>();
   final _senhaAtual = TextEditingController();
   final _novaSenha = TextEditingController();
@@ -93,7 +94,7 @@ class _AlterarSenhaPageState extends State<AlterarSenhaPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _enviando = true);
     try {
-      await ApiService.instance.updateProfile({
+      await _perfilRepository.atualizar({
         'current_password': _senhaAtual.text,
         'password': _novaSenha.text,
         'password_confirmation': _confirmacao.text,

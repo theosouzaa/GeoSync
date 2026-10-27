@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
-import 'package:mobile/app_session.dart';
+import 'package:mobile/core/session_repository.dart';
 import 'package:mobile/tela_dashboard.dart';
 import 'package:mobile/motorista/motorista_dashboard.dart';
 import 'package:mobile/services/api_exception.dart';
@@ -57,11 +57,19 @@ class _CadastroScreenState extends State<CadastroScreen> {
       );
       final token = ApiService.instance.authToken(resposta);
       if (token != null) {
-        await AppSession.iniciarSessao(
-          token: token,
-          tipoUsuario: _tipoUsuario,
-          email: _email.text,
-          nome: _nome.text,
+        await const SessionRepository().iniciarSessaoFromResponse(
+          <String, dynamic>{
+            ...resposta,
+            'data': {
+              ...(resposta['data'] is Map ? Map<String, dynamic>.from(resposta['data']) : <String, dynamic>{}),
+              'token': token,
+              'user': {
+                'email': _email.text,
+                'name': _nome.text,
+                'tipo': _tipoUsuario,
+              },
+            },
+          },
         );
       }
       if (resposta.isEmpty) {

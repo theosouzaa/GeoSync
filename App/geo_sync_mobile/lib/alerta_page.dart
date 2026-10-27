@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:mobile/core/alerta_repository.dart';
 import 'package:mobile/services/api_exception.dart';
-import 'package:mobile/services/api_service.dart';
 import 'package:mobile/services/notification_center.dart';
 
 void main() {
@@ -51,6 +51,8 @@ class TelaAlertas extends StatefulWidget {
 }
 
 class _TelaAlertasState extends State<TelaAlertas> {
+  final AlertaRepository _alertaRepository = AlertaRepository();
+
   // ============================================================
   // PALETA GEOSYNC
   // ============================================================
@@ -161,7 +163,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
       });
     }
     try {
-      final resposta = await ApiService.instance.alertas(
+      final resposta = await _alertaRepository.listar(
         forceRefresh: forceRefresh,
       );
       final dados = resposta.whereType<Map>().map(_alertaFromApi).toList();
@@ -210,7 +212,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
     if (alerta.lido || alerta.id == null) return;
     setState(() => alerta.lido = true);
     try {
-      await ApiService.instance.atualizarAlerta(alerta.id!, {'lido': true});
+      await _alertaRepository.marcarComoLido(alerta.id!);
     } on ApiException catch (_) {
       // Mantém como lido localmente mesmo se o backend não confirmar,
       // para não reabrir um alerta que o usuário já visualizou.
@@ -230,8 +232,8 @@ class _TelaAlertasState extends State<TelaAlertas> {
     await Future.wait([
       for (final alerta in pendentes)
         if (alerta.id != null)
-          ApiService.instance
-              .atualizarAlerta(alerta.id!, {'lido': true})
+          _alertaRepository
+              .marcarComoLido(alerta.id!)
               .catchError((_) => <String, dynamic>{}),
     ]);
     unawaited(AppNotificationCenter.instance.refreshNow());
@@ -793,67 +795,67 @@ class _TelaAlertasState extends State<TelaAlertas> {
           borderRadius: BorderRadius.circular(30),
           child: InkWell(
             borderRadius: BorderRadius.circular(30),
-          onTap: () {
-            setState(() {
-              filtroSelecionado = texto;
-            });
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(
-              color: selecionado ? cor : surface,
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: selecionado ? cor : border),
-              boxShadow: selecionado
-                  ? [
-                      BoxShadow(
-                        color: cor.withValues(alpha: 0.20),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Row(
-              children: [
-                Text(
-                  texto,
-                  style: TextStyle(
-                    color: selecionado ? Colors.white : textDark,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-
-                const SizedBox(width: 7),
-
-                Container(
-                  constraints: const BoxConstraints(
-                    minWidth: 21,
-                    minHeight: 21,
-                  ),
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  decoration: BoxDecoration(
-                    color: selecionado
-                        ? Colors.white.withValues(alpha: 0.20)
-                        : cor.withValues(alpha: 0.10),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    quantidade.toString(),
+            onTap: () {
+              setState(() {
+                filtroSelecionado = texto;
+              });
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: selecionado ? cor : surface,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: selecionado ? cor : border),
+                boxShadow: selecionado
+                    ? [
+                        BoxShadow(
+                          color: cor.withValues(alpha: 0.20),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    texto,
                     style: TextStyle(
-                      color: selecionado ? Colors.white : cor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      color: selecionado ? Colors.white : textDark,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
                     ),
                   ),
-                ),
-              ],
+
+                  const SizedBox(width: 7),
+
+                  Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 21,
+                      minHeight: 21,
+                    ),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: BoxDecoration(
+                      color: selecionado
+                          ? Colors.white.withValues(alpha: 0.20)
+                          : cor.withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      quantidade.toString(),
+                      style: TextStyle(
+                        color: selecionado ? Colors.white : cor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
         ),
       ),

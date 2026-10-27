@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong2;
+import 'package:mobile/core/remessa_repository.dart';
 import 'package:mobile/services/api_exception.dart';
-import 'package:mobile/services/api_service.dart';
 import 'package:mobile/widgets/responsive_content.dart';
 
 class MapaMotoristaPage extends StatefulWidget {
@@ -15,6 +15,7 @@ class MapaMotoristaPage extends StatefulWidget {
 }
 
 class _MapaMotoristaPageState extends State<MapaMotoristaPage> {
+  final RemessaRepository _remessaRepository = RemessaRepository();
   late String _selecionada;
   List<_Remessa> _remessas = [];
   bool _carregandoRemessas = true;
@@ -39,9 +40,7 @@ class _MapaMotoristaPageState extends State<MapaMotoristaPage> {
       });
     }
     try {
-      final dados = await ApiService.instance.minhasRemessas(
-        forceRefresh: true,
-      );
+      final dados = await _remessaRepository.minhas(forceRefresh: true);
       final remessas = dados
           .whereType<Map>()
           .map(_Remessa.fromApi)
@@ -78,9 +77,7 @@ class _MapaMotoristaPageState extends State<MapaMotoristaPage> {
       _pontosIoT = [];
     });
     try {
-      final dados = await ApiService.instance.localizacoesPorRemessa(
-        remessa.id!,
-      );
+      final dados = await _remessaRepository.localizacoes(remessa.id!);
       final registros = dados.whereType<Map>().toList()
         ..sort((a, b) {
           final da = DateTime.tryParse(

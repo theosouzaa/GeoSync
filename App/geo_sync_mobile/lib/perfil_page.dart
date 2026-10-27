@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'package:mobile/core/perfil_repository.dart';
 import 'package:mobile/editar_perfil_page.dart';
 import 'package:mobile/login_screen.dart';
 import 'package:mobile/app_session.dart';
@@ -21,6 +22,8 @@ class PerfilClientePage extends StatefulWidget {
 }
 
 class _PerfilClientePageState extends State<PerfilClientePage> {
+  final PerfilRepository _perfilRepository = PerfilRepository();
+
   // ============================================================
   // DADOS DO USUÁRIO
   // ============================================================
@@ -41,9 +44,7 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
 
   Future<void> _carregarPerfil() async {
     try {
-      final resposta = ApiService.instance.authData(
-        await ApiService.instance.me(),
-      );
+      final resposta = ApiService.instance.authData(await _perfilRepository.dados());
       final usuario = ApiService.instance.authUser(resposta);
       if (!mounted || usuario.isEmpty) return;
       setState(() {
@@ -206,7 +207,7 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
                           Navigator.of(dialogContext).pop();
 
                           try {
-                            await ApiService.instance.logout();
+                            await _perfilRepository.sair();
                           } catch (_) {
                             // Remove the local credentials if the server is unavailable.
                           }
@@ -454,7 +455,7 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
     final telefone = '${resultado['telefone'] ?? _telefone}';
     final endereco = '${resultado['endereco'] ?? _endereco}';
     try {
-      await ApiService.instance.updateProfile({
+      await _perfilRepository.atualizar({
         'name': nome,
         'email': email,
         'telefone': telefone,
@@ -463,10 +464,10 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
       if (resultado['fotoAlterada'] == true) {
         final bytes = resultado['fotoBytes'] as Uint8List?;
         if (bytes == null) {
-          await ApiService.instance.deleteProfilePhoto();
+          await _perfilRepository.removerFoto();
           foto = null;
         } else {
-          final upload = await ApiService.instance.uploadProfilePhoto(
+          final upload = await _perfilRepository.subirFoto(
             bytes,
             filename: '${resultado['fotoNomeArquivo'] ?? 'perfil.jpg'}',
           );
@@ -503,7 +504,7 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
       );
       if (imagem == null) return;
       final bytes = await imagem.readAsBytes();
-      final upload = await ApiService.instance.uploadProfilePhoto(
+      final upload = await _perfilRepository.subirFoto(
         bytes,
         filename: imagem.name,
       );

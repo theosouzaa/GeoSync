@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile/app_session.dart';
+import 'package:mobile/core/motorista_repository.dart';
+import 'package:mobile/core/perfil_repository.dart';
 import 'package:mobile/services/api_exception.dart';
 import 'package:mobile/services/api_service.dart';
 import 'package:mobile/widgets/app_gradient_header.dart';
@@ -15,6 +17,8 @@ class DocumentosMotoristaPage extends StatefulWidget {
 }
 
 class _DocumentosMotoristaPageState extends State<DocumentosMotoristaPage> {
+  final PerfilRepository _perfilRepository = PerfilRepository();
+  final MotoristaRepository _motoristaRepository = MotoristaRepository();
   static const primary = Color(0xFF0C46FF);
   bool _enviando = false;
   bool _carregando = true;
@@ -36,7 +40,7 @@ class _DocumentosMotoristaPageState extends State<DocumentosMotoristaPage> {
       });
     }
     try {
-      final resposta = await ApiService.instance.documentosMotorista();
+      final resposta = await _motoristaRepository.documentos();
       if (mounted) {
         setState(() {
           _documentosApi = resposta
@@ -53,7 +57,7 @@ class _DocumentosMotoristaPageState extends State<DocumentosMotoristaPage> {
     }
     try {
       final usuario = ApiService.instance.authUser(
-        await ApiService.instance.me(),
+        ApiService.instance.authData(await _perfilRepository.dados()),
       );
       final motorista = usuario['motorista'] ?? usuario['driver'];
       if (mounted) {

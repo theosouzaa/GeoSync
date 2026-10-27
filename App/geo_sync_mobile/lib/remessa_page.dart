@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:mobile/core/remessa_repository.dart';
 import 'package:mobile/services/api_exception.dart';
-import 'package:mobile/services/api_service.dart';
 import 'package:mobile/services/shipment_progress.dart';
 import 'package:mobile/mapa_page.dart';
 import 'package:mobile/suporte_page.dart';
@@ -17,6 +17,7 @@ class RemessasPage extends StatefulWidget {
 }
 
 class _RemessasPageState extends State<RemessasPage> {
+  final RemessaRepository _remessaRepository = RemessaRepository();
   final TextEditingController _searchController = TextEditingController();
 
   String filtroSelecionado = "Todas";
@@ -90,7 +91,7 @@ class _RemessasPageState extends State<RemessasPage> {
     }
     try {
       // A listagem do cliente é diferente da fila sincronizada do motorista.
-      final resposta = await ApiService.instance.remessasAutorizadas();
+      final resposta = await _remessaRepository.autorizadas();
       final dados = resposta.whereType<Map>().map(_remessaFromApi).toList();
       if (!mounted) return;
       setState(() {
@@ -115,7 +116,8 @@ class _RemessasPageState extends State<RemessasPage> {
   }
 
   Remessa _remessaFromApi(Map value) {
-    final status = '${value['status'] ?? value['situacao'] ?? 'Aguardando coleta'}';
+    final status =
+        '${value['status'] ?? value['situacao'] ?? 'Aguardando coleta'}';
     return Remessa(
       id: value['id'] ?? value['remessa_id'],
       codigo:
@@ -809,16 +811,19 @@ class _RemessaCardState extends State<RemessaCard> {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(statusIcon, size: 14, color: statusColor),
                     const SizedBox(width: 5),
-                    Text(
-                      widget.remessa.status,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Text(
+                        widget.remessa.status,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -828,86 +833,46 @@ class _RemessaCardState extends State<RemessaCard> {
               const SizedBox(height: 18),
 
               // ROTA
-              Row(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    children: [
-                      const Icon(
-                        CupertinoIcons.largecircle_fill_circle,
-                        size: 17,
-                        color: Color(0xFF2563EB),
-                      ),
-                      Container(
-                        width: 2,
-                        height: 28,
-                        color: Colors.grey.shade300,
-                      ),
-                      const Icon(
-                        CupertinoIcons.placemark,
-                        size: 18,
-                        color: Color(0xFFDC2626),
-                      ),
-                    ],
+                  RotaDetalhe(
+                    icone: CupertinoIcons.largecircle_fill_circle,
+                    cor: const Color(0xFF2563EB),
+                    titulo: 'Origem',
+                    valor: widget.remessa.origem,
                   ),
-
-                  const SizedBox(width: 10),
-
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Origem",
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                        Text(
-                          widget.remessa.origem,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          "Destino",
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                        Text(
-                          widget.remessa.destino,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
+                  const SizedBox(height: 12),
+                  RotaDetalhe(
+                    icone: CupertinoIcons.placemark,
+                    cor: const Color(0xFFDC2626),
+                    titulo: 'Destino',
+                    valor: widget.remessa.destino,
                   ),
-
-                  // ETA
+                  const SizedBox(height: 12),
                   Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "ETA",
+                        'Previsão de chegada',
                         style: TextStyle(
                           color: Colors.grey.shade500,
                           fontSize: 10,
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        widget.remessa.eta,
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(height: 2),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          widget.remessa.eta,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
@@ -920,11 +885,17 @@ class _RemessaCardState extends State<RemessaCard> {
               // PROGRESSO
               Row(
                 children: [
-                  Text(
-                    "Progresso pela etapa",
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                  Expanded(
+                    child: Text(
+                      "Progresso pela etapa",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
                   ),
-                  const Spacer(),
                   Text(
                     "${(widget.remessa.progresso * 100).toInt()}%",
                     style: TextStyle(
@@ -951,32 +922,41 @@ class _RemessaCardState extends State<RemessaCard> {
               const SizedBox(height: 14),
 
               // RODAPÉ
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    CupertinoIcons.gauge,
-                    size: 16,
-                    color: Colors.grey.shade500,
+                  Row(
+                    children: [
+                      Icon(
+                        CupertinoIcons.gauge,
+                        size: 16,
+                        color: Colors.grey.shade500,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          widget.remessa.peso,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 5),
-                  Text(
-                    widget.remessa.peso,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                  ),
-                  const Spacer(),
-                  const Text(
-                    "Ver detalhes",
-                    style: TextStyle(
-                      color: Color(0xFF2563EB),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Semantics(
+                      label: 'Ver detalhes da remessa',
+                      child: Icon(
+                        CupertinoIcons.chevron_right,
+                        size: 12,
+                        color: Color(0xFF2563EB),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 3),
-                  const Icon(
-                    CupertinoIcons.chevron_right,
-                    size: 12,
-                    color: Color(0xFF2563EB),
                   ),
                 ],
               ),
@@ -1077,7 +1057,7 @@ class DetalhesRemessa extends StatefulWidget {
 class _DetalhesRemessaState extends State<DetalhesRemessa> {
   late final Future<List<dynamic>> _historico = widget.remessa.id == null
       ? Future.value(const [])
-      : ApiService.instance.historicoRemessa(widget.remessa.id!);
+      : RemessaRepository().historico(widget.remessa.id!);
 
   Remessa get remessa => widget.remessa;
 

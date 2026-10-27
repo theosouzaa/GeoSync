@@ -13,8 +13,8 @@ import 'package:flutter_map/flutter_map.dart'
         PolylineLayer,
         TileLayer;
 import 'package:latlong2/latlong.dart' as latlong2;
+import 'package:mobile/core/remessa_repository.dart';
 import 'package:mobile/services/api_exception.dart';
-import 'package:mobile/services/api_service.dart';
 
 class MapaPage extends StatefulWidget {
   final int currentIndex;
@@ -28,6 +28,7 @@ class MapaPage extends StatefulWidget {
 
 class _MapaPageState extends State<MapaPage>
     with SingleTickerProviderStateMixin {
+  final RemessaRepository _remessaRepository = RemessaRepository();
   String _filtroSelecionado = "Todos";
   String? _veiculoSelecionado;
   late AnimationController _pulseController;
@@ -58,7 +59,7 @@ class _MapaPageState extends State<MapaPage>
       });
     }
     try {
-      final resposta = await ApiService.instance.remessasAutorizadas();
+      final resposta = await _remessaRepository.autorizadas();
       final dados = resposta.whereType<Map>().map(_rotaFromApi).toList();
       if (!mounted) return false;
       setState(() {
@@ -115,7 +116,8 @@ class _MapaPageState extends State<MapaPage>
       .replaceAll('\u00e7', 'c');
 
   RotaModel _rotaFromApi(Map value) {
-    final latitude = value['latitude_destino'] ??
+    final latitude =
+        value['latitude_destino'] ??
         value['destino_latitude'] ??
         value['latitude'] ??
         value['lat'];
@@ -237,59 +239,59 @@ class _MapaPageState extends State<MapaPage>
           },
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            _buildHeader(),
+            children: [
+              _buildHeader(),
 
-            if (_erroLocalizacoes != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: Text(
-                  _erroLocalizacoes!,
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-
-            const SizedBox(height: 16),
-            _buildMapCard(),
-
-            const SizedBox(height: 16),
-            _buildStatusSummary(),
-
-            const SizedBox(height: 18),
-            _buildFilters(),
-
-            const SizedBox(height: 18),
-            _buildRoutesHeader(),
-
-            const SizedBox(height: 10),
-
-            if (_carregandoLocalizacoes)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: CircularProgressIndicator(),
-                ),
-              )
-            else if (_rotasFiltradas.isEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-                child: Center(
+              if (_erroLocalizacoes != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                   child: Text(
-                    _erroLocalizacoes ??
-                        (_rotas.isEmpty
-                            ? 'Nenhuma remessa disponivel para rastrear.'
-                            : 'Nenhuma remessa corresponde a este filtro.'),
+                    _erroLocalizacoes!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
                   ),
                 ),
-              )
-            else
-              ..._rotasFiltradas.map(_buildRouteCard),
-          ],
+
+              const SizedBox(height: 16),
+              _buildMapCard(),
+
+              const SizedBox(height: 16),
+              _buildStatusSummary(),
+
+              const SizedBox(height: 18),
+              _buildFilters(),
+
+              const SizedBox(height: 18),
+              _buildRoutesHeader(),
+
+              const SizedBox(height: 10),
+
+              if (_carregandoLocalizacoes)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (_rotasFiltradas.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                  child: Center(
+                    child: Text(
+                      _erroLocalizacoes ??
+                          (_rotas.isEmpty
+                              ? 'Nenhuma remessa disponivel para rastrear.'
+                              : 'Nenhuma remessa corresponde a este filtro.'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ..._rotasFiltradas.map(_buildRouteCard),
+            ],
           ),
         ),
       ),
@@ -464,7 +466,7 @@ class _MapaPageState extends State<MapaPage>
   Future<void> _carregarRota(RotaModel rota) async {
     if (rota.id == null) return;
     try {
-      final dados = await ApiService.instance.localizacoesPorRemessa(rota.id!);
+      final dados = await _remessaRepository.localizacoes(rota.id!);
       final registros = dados.whereType<Map>().toList()
         ..sort((a, b) {
           final dataA = DateTime.tryParse(

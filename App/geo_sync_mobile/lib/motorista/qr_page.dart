@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:mobile/core/remessa_repository.dart';
 import 'package:mobile/motorista/entrega_page.dart';
-import 'package:mobile/services/api_service.dart';
 import 'package:mobile/widgets/app_gradient_header.dart';
 import 'package:mobile/widgets/responsive_content.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -10,7 +10,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 class RemessaQrCodec {
   static const _prefix = 'geo-sync-remessa';
 
-  static String encode(Object remessaId) => '$_prefix:${remessaId.toString().trim()}';
+  static String encode(Object remessaId) =>
+      '$_prefix:${remessaId.toString().trim()}';
 
   static String? decode(String? rawValue) {
     final value = rawValue?.trim();
@@ -40,6 +41,7 @@ class QrRemessaPage extends StatefulWidget {
 }
 
 class _QrRemessaPageState extends State<QrRemessaPage> {
+  final RemessaRepository _remessaRepository = RemessaRepository();
   bool _loading = true;
   String? _error;
   List<Remessa> _remessas = [];
@@ -57,18 +59,21 @@ class _QrRemessaPageState extends State<QrRemessaPage> {
     });
 
     try {
-      final data = await ApiService.instance.minhasRemessas(forceRefresh: true);
+      final data = await _remessaRepository.minhas(forceRefresh: true);
       final remessas = data.whereType<Map>().map((item) {
         final progresso = item['progresso'] ?? item['progress'] ?? 0;
         return Remessa(
           codigo: '${item['codigo'] ?? item['code'] ?? item['id'] ?? '-'}',
-          status: '${item['status'] ?? item['situacao'] ?? 'Aguardando coleta'}',
+          status:
+              '${item['status'] ?? item['situacao'] ?? 'Aguardando coleta'}',
           origem: '${item['origem'] ?? item['origin'] ?? '-'}',
           destino: '${item['destino'] ?? item['destination'] ?? '-'}',
           tipo: '${item['tipo'] ?? item['tipo_carga'] ?? item['cargo'] ?? '-'}',
           peso: '${item['peso'] ?? item['weight'] ?? '-'}',
           eta: '${item['eta'] ?? item['previsao_entrega'] ?? '-'}',
-          progresso: progresso is num ? progresso.toDouble().clamp(0.0, 1.0) : 0.0,
+          progresso: progresso is num
+              ? progresso.toDouble().clamp(0.0, 1.0)
+              : 0.0,
           id: item['id'] ?? item['remessa_id'],
         );
       }).toList();
@@ -81,32 +86,36 @@ class _QrRemessaPageState extends State<QrRemessaPage> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Não foi possível carregar as remessas para gerar ou escanear o QR.';
+        _error =
+            'Não foi possível carregar as remessas para gerar ou escanear o QR.';
         _loading = false;
       });
     }
   }
 
   Future<void> _abrirScanner() async {
-    final id = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const QrScannerPage()),
-    );
+    final id = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const QrScannerPage()));
     if (id == null || !mounted) return;
 
     try {
-      final payload = await ApiService.instance.remessa(id);
+      final payload = await _remessaRepository.detalhes(id);
       final remessa = Remessa(
-        codigo: '${payload['codigo'] ?? payload['code'] ?? payload['id'] ?? '-'}',
-        status: '${payload['status'] ?? payload['situacao'] ?? 'Aguardando coleta'}',
+        codigo:
+            '${payload['codigo'] ?? payload['code'] ?? payload['id'] ?? '-'}',
+        status:
+            '${payload['status'] ?? payload['situacao'] ?? 'Aguardando coleta'}',
         origem: '${payload['origem'] ?? payload['origin'] ?? '-'}',
         destino: '${payload['destino'] ?? payload['destination'] ?? '-'}',
-        tipo: '${payload['tipo'] ?? payload['tipo_carga'] ?? payload['cargo'] ?? '-'}',
+        tipo:
+            '${payload['tipo'] ?? payload['tipo_carga'] ?? payload['cargo'] ?? '-'}',
         peso: '${payload['peso'] ?? payload['weight'] ?? '-'}',
         eta: '${payload['eta'] ?? payload['previsao_entrega'] ?? '-'}',
         progresso: (payload['progresso'] ?? payload['progress'] ?? 0) is num
             ? ((payload['progresso'] ?? payload['progress'] ?? 0) as num)
-                .toDouble()
-                .clamp(0.0, 1.0)
+                  .toDouble()
+                  .clamp(0.0, 1.0)
             : 0.0,
         id: payload['id'] ?? payload['remessa_id'],
       );
@@ -118,7 +127,11 @@ class _QrRemessaPageState extends State<QrRemessaPage> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível localizar a remessa do QR informado.')),
+        const SnackBar(
+          content: Text(
+            'Não foi possível localizar a remessa do QR informado.',
+          ),
+        ),
       );
     }
   }
@@ -153,39 +166,43 @@ class _QrRemessaPageState extends State<QrRemessaPage> {
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(LucideIcons.cloudOff, size: 52),
-                                  const SizedBox(height: 12),
-                                  Text(_error!, textAlign: TextAlign.center),
-                                  const SizedBox(height: 18),
-                                  FilledButton.icon(
-                                    onPressed: _carregarRemessas,
-                                    icon: const Icon(LucideIcons.refreshCw),
-                                    label: const Text('Tentar novamente'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        : ListView(
-                            padding: const EdgeInsets.all(16),
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (_remessas.isEmpty)
-                                const Card(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(24),
-                                    child: Text('Nenhuma remessa disponível para gerar QR.'),
-                                  ),
-                                )
-                              else
-                                ..._remessas.map((remessa) => _cardRemessa(remessa)),
+                              const Icon(LucideIcons.cloudOff, size: 52),
+                              const SizedBox(height: 12),
+                              Text(_error!, textAlign: TextAlign.center),
+                              const SizedBox(height: 18),
+                              FilledButton.icon(
+                                onPressed: _carregarRemessas,
+                                icon: const Icon(LucideIcons.refreshCw),
+                                label: const Text('Tentar novamente'),
+                              ),
                             ],
                           ),
+                        ),
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          if (_remessas.isEmpty)
+                            const Card(
+                              child: Padding(
+                                padding: EdgeInsets.all(24),
+                                child: Text(
+                                  'Nenhuma remessa disponível para gerar QR.',
+                                ),
+                              ),
+                            )
+                          else
+                            ..._remessas.map(
+                              (remessa) => _cardRemessa(remessa),
+                            ),
+                        ],
+                      ),
               ),
             ),
           ],
@@ -228,7 +245,10 @@ class _QrRemessaPageState extends State<QrRemessaPage> {
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 4),
-                  Text(remessa.status, style: const TextStyle(color: Color(0xFF64748B))),
+                  Text(
+                    remessa.status,
+                    style: const TextStyle(color: Color(0xFF64748B)),
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     '${remessa.origem} → ${remessa.destino}',
@@ -259,19 +279,20 @@ class _QrRemessaPageState extends State<QrRemessaPage> {
 }
 
 class QrCodePreviewPage extends StatelessWidget {
-  const QrCodePreviewPage({super.key, required this.remessa});
+  QrCodePreviewPage({super.key, required this.remessa});
 
   final Remessa remessa;
+  final RemessaRepository _remessaRepository = RemessaRepository();
 
   @override
   Widget build(BuildContext context) {
     final payload = RemessaQrCodec.encode(remessa.id ?? remessa.codigo);
-    final preview = payload.length > 32 ? '${payload.substring(0, 32)}…' : payload;
+    final preview = payload.length > 32
+        ? '${payload.substring(0, 32)}…'
+        : payload;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Código QR da remessa'),
-      ),
+      appBar: AppBar(title: const Text('Código QR da remessa')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -283,7 +304,10 @@ class QrCodePreviewPage extends StatelessWidget {
                 children: [
                   Text(
                     remessa.codigo,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   QrImageView(
@@ -295,40 +319,68 @@ class QrCodePreviewPage extends StatelessWidget {
                   Text(
                     'Conteúdo: $preview',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF64748B),
+                    ),
                   ),
                   const SizedBox(height: 18),
                   FilledButton.icon(
                     onPressed: () async {
-                      final scannedId = await Navigator.of(context).push<String>(
-                        MaterialPageRoute(builder: (_) => const QrScannerPage()),
-                      );
+                      final scannedId = await Navigator.of(context)
+                          .push<String>(
+                            MaterialPageRoute(
+                              builder: (_) => const QrScannerPage(),
+                            ),
+                          );
                       if (scannedId == null || !context.mounted) return;
                       try {
-                        final remessaData = await ApiService.instance.remessa(scannedId);
+                        final remessaData = await _remessaRepository.detalhes(
+                          scannedId,
+                        );
                         final found = Remessa(
-                          codigo: '${remessaData['codigo'] ?? remessaData['code'] ?? remessaData['id'] ?? '-'}',
-                          status: '${remessaData['status'] ?? remessaData['situacao'] ?? 'Aguardando coleta'}',
-                          origem: '${remessaData['origem'] ?? remessaData['origin'] ?? '-'}',
-                          destino: '${remessaData['destino'] ?? remessaData['destination'] ?? '-'}',
-                          tipo: '${remessaData['tipo'] ?? remessaData['tipo_carga'] ?? remessaData['cargo'] ?? '-'}',
-                          peso: '${remessaData['peso'] ?? remessaData['weight'] ?? '-'}',
-                          eta: '${remessaData['eta'] ?? remessaData['previsao_entrega'] ?? '-'}',
-                          progresso: (remessaData['progresso'] ?? remessaData['progress'] ?? 0) is num
-                              ? ((remessaData['progresso'] ?? remessaData['progress'] ?? 0) as num)
-                                  .toDouble()
-                                  .clamp(0.0, 1.0)
+                          codigo:
+                              '${remessaData['codigo'] ?? remessaData['code'] ?? remessaData['id'] ?? '-'}',
+                          status:
+                              '${remessaData['status'] ?? remessaData['situacao'] ?? 'Aguardando coleta'}',
+                          origem:
+                              '${remessaData['origem'] ?? remessaData['origin'] ?? '-'}',
+                          destino:
+                              '${remessaData['destino'] ?? remessaData['destination'] ?? '-'}',
+                          tipo:
+                              '${remessaData['tipo'] ?? remessaData['tipo_carga'] ?? remessaData['cargo'] ?? '-'}',
+                          peso:
+                              '${remessaData['peso'] ?? remessaData['weight'] ?? '-'}',
+                          eta:
+                              '${remessaData['eta'] ?? remessaData['previsao_entrega'] ?? '-'}',
+                          progresso:
+                              (remessaData['progresso'] ??
+                                      remessaData['progress'] ??
+                                      0)
+                                  is num
+                              ? ((remessaData['progresso'] ??
+                                            remessaData['progress'] ??
+                                            0)
+                                        as num)
+                                    .toDouble()
+                                    .clamp(0.0, 1.0)
                               : 0.0,
                           id: remessaData['id'] ?? remessaData['remessa_id'],
                         );
                         if (!context.mounted) return;
                         Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => DetalhesRemessa(remessa: found)),
+                          MaterialPageRoute(
+                            builder: (_) => DetalhesRemessa(remessa: found),
+                          ),
                         );
                       } catch (_) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('QR válido, mas a remessa não foi encontrada.')),
+                          const SnackBar(
+                            content: Text(
+                              'QR válido, mas a remessa não foi encontrada.',
+                            ),
+                          ),
                         );
                       }
                     },
@@ -365,9 +417,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ler QR da remessa'),
-      ),
+      appBar: AppBar(title: const Text('Ler QR da remessa')),
       body: Stack(
         children: [
           MobileScanner(
@@ -378,7 +428,11 @@ class _QrScannerPageState extends State<QrScannerPage> {
               final remessaId = RemessaQrCodec.decode(rawValue);
               if (remessaId == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('QR inválido. Use um código gerado pela app.')),
+                  const SnackBar(
+                    content: Text(
+                      'QR inválido. Use um código gerado pela app.',
+                    ),
+                  ),
                 );
                 return;
               }
@@ -394,14 +448,20 @@ class _QrScannerPageState extends State<QrScannerPage> {
             bottom: 32,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Text(
                   'Posicione o código QR da remessa na câmera',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),

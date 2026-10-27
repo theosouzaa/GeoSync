@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile/app_session.dart';
+import 'package:mobile/core/motorista_repository.dart';
+import 'package:mobile/core/perfil_repository.dart';
 import 'package:mobile/services/api_exception.dart';
 import 'package:mobile/services/api_service.dart';
 import 'package:mobile/widgets/app_gradient_header.dart';
@@ -17,6 +19,8 @@ class VeiculoMotoristaPage extends StatefulWidget {
 }
 
 class _VeiculoMotoristaPageState extends State<VeiculoMotoristaPage> {
+  final PerfilRepository _perfilRepository = PerfilRepository();
+  final MotoristaRepository _motoristaRepository = MotoristaRepository();
   static const _larguraDuasColunas = 760.0;
   static final _placaValida = RegExp(r'^[A-Z]{3}-?[0-9][A-Z0-9][0-9]{2}$');
 
@@ -58,7 +62,7 @@ class _VeiculoMotoristaPageState extends State<VeiculoMotoristaPage> {
   Future<void> _carregarSituacaoApi() async {
     try {
       final usuario = ApiService.instance.authUser(
-        await ApiService.instance.me(),
+        ApiService.instance.authData(await _perfilRepository.dados()),
       );
       final motorista = usuario['motorista'] ?? usuario['driver'];
       final perfil = motorista is Map ? motorista : usuario;
@@ -142,7 +146,7 @@ class _VeiculoMotoristaPageState extends State<VeiculoMotoristaPage> {
       var mensagem =
           'Dados salvos neste dispositivo. O servidor ainda precisa ser atualizado.';
       try {
-        await ApiService.instance.updateProfile({'veiculo': veiculo.toJson()});
+        await _motoristaRepository.atualizarVeiculo(veiculo.toJson());
         mensagem = 'Dados do veículo atualizados no servidor.';
       } on ApiException {
         // Preserva a edição local quando a API está offline ou indisponível.

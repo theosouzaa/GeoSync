@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile/alterar_senha_page.dart';
 import 'package:mobile/app_session.dart';
+import 'package:mobile/core/perfil_repository.dart';
 import 'package:mobile/motorista/sincronizacao_widgets.dart';
 import 'package:mobile/services/api_exception.dart';
 import 'package:mobile/services/api_service.dart';
@@ -265,7 +266,8 @@ class _ConfiguracoesMotoristaPageState
                             icon: LucideIcons.cloud,
                             color: SettingsColors.blue,
                             title: 'Servidor da API e IoT',
-                            subtitle: 'Configure de onde carregar remessas e posições do veículo',
+                            subtitle:
+                                'Configure de onde carregar remessas e posições do veículo',
                             onTap: () => configurarServidorApi(context),
                           ),
                         ],
@@ -435,6 +437,7 @@ class _DadosPessoaisSheet extends StatefulWidget {
 }
 
 class _DadosPessoaisSheetState extends State<_DadosPessoaisSheet> {
+  final PerfilRepository _perfilRepository = PerfilRepository();
   final _formKey = GlobalKey<FormState>();
   final _nome = TextEditingController(text: AppSession.nome);
   final _telefone = TextEditingController();
@@ -460,8 +463,9 @@ class _DadosPessoaisSheetState extends State<_DadosPessoaisSheet> {
   /// Busca o telefone (e dados mais recentes) na API para pré-preencher.
   Future<void> _carregarPerfil() async {
     try {
-      final api = ApiService.instance;
-      final usuario = api.authUser(api.authData(await api.me()));
+      final usuario = ApiService.instance.authUser(
+        ApiService.instance.authData(await _perfilRepository.dados()),
+      );
       if (!mounted) return;
       final nome = '${usuario['name'] ?? usuario['nome'] ?? ''}'.trim();
       final email = '${usuario['email'] ?? ''}'.trim();
@@ -489,7 +493,7 @@ class _DadosPessoaisSheetState extends State<_DadosPessoaisSheet> {
     final nome = _nome.text.trim();
     final email = _email.text.trim();
     try {
-      await ApiService.instance.updateProfile({
+      await _perfilRepository.atualizar({
         'name': nome,
         'telefone': _telefone.text.trim(),
         'email': email,

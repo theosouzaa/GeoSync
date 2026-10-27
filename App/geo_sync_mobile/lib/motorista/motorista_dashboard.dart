@@ -17,6 +17,10 @@ import 'package:mobile/motorista/configuracoes_page.dart';
 import 'package:mobile/motorista/documentos_page.dart';
 import 'package:mobile/motorista/entrega_page.dart';
 import 'package:mobile/motorista/mapa_motorista_page.dart';
+import 'package:mobile/core/motorista_repository.dart';
+import 'package:mobile/core/avaliacao_repository.dart';
+import 'package:mobile/core/perfil_repository.dart';
+import 'package:mobile/core/remessa_repository.dart';
 import 'package:mobile/motorista/veiculo_motorista_page.dart';
 import 'package:mobile/widgets/responsive_content.dart';
 
@@ -30,6 +34,11 @@ class MotoristaDashboard extends StatefulWidget {
 }
 
 class _MotoristaDashboardState extends State<MotoristaDashboard> {
+  final RemessaRepository _remessaRepository = RemessaRepository();
+  final AvaliacaoRepository _avaliacaoRepository = AvaliacaoRepository();
+  final MotoristaRepository _motoristaRepository = MotoristaRepository();
+  final PerfilRepository _perfilRepository = PerfilRepository();
+
   // ============================================================
   // CORES
   // ============================================================
@@ -252,13 +261,10 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
         fetch: () => ApiService.instance.avisosMotorista(),
       );
     });
-    _novasEntregasTimer = Timer.periodic(
-      const Duration(seconds: 60),
-      (_) {
-        _verificarNovasEntregas();
-        if (_currentIndex == 0) _carregarResumo();
-      },
-    );
+    _novasEntregasTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      _verificarNovasEntregas();
+      if (_currentIndex == 0) _carregarResumo();
+    });
     _verificarNovasEntregas();
   }
 
@@ -272,7 +278,7 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
   Future<void> _verificarNovasEntregas() async {
     if (!AppSession.configuracoesMotorista.value.novasEntregas) return;
     try {
-      final disponiveis = await ApiService.instance.remessasDisponiveis();
+      final disponiveis = await _remessaRepository.disponiveis();
       final quantidade = disponiveis.length;
       final anterior = _disponiveisConhecidas;
       _disponiveisConhecidas = quantidade;
@@ -333,9 +339,7 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
       });
     }
     try {
-      final dados = await ApiService.instance.minhasRemessas(
-        forceRefresh: true,
-      );
+      final dados = await _remessaRepository.minhas(forceRefresh: true);
       if (!mounted) return;
       setState(() {
         _remessas = dados.whereType<Map>().map((item) {
@@ -440,7 +444,7 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
   Future<void> _carregarAvaliacao() async {
     double? media;
     try {
-      final resumo = await ApiService.instance.resumoAvaliacoes();
+      final resumo = await _avaliacaoRepository.resumo();
       final dados = resumo['data'] is Map
           ? _mapaApi(resumo['data'] as Map)
           : resumo;
@@ -455,7 +459,7 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
           : double.tryParse('$valor'.replaceAll(',', '.'));
     } catch (_) {
       try {
-        final avaliacoes = await ApiService.instance.avaliacoes();
+        final avaliacoes = await _avaliacaoRepository.listar();
         final notas = avaliacoes
             .whereType<Map>()
             .map((item) {
@@ -493,7 +497,7 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
     final erros = <String>[];
     try {
       usuario = ApiService.instance.authUser(
-        ApiService.instance.authData(await ApiService.instance.me()),
+        ApiService.instance.authData(await _perfilRepository.dados()),
       );
     } on ApiException catch (error) {
       erros.add('Perfil: ${error.message}');
@@ -501,7 +505,7 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
       erros.add('Perfil: $error');
     }
     try {
-      documentos = (await ApiService.instance.documentosMotorista())
+      documentos = (await _motoristaRepository.documentos())
           .whereType<Map>()
           .map(_mapaApi)
           .toList();
@@ -524,8 +528,8 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
       _falhaCarregamentoPerfil = erros.isNotEmpty;
       _erroCarregamentoPerfil = erros.isEmpty ? null : erros.join('\n');
     });
-    final temCampoFoto = usuario.containsKey('foto') ||
-        usuario.containsKey('profile_photo');
+    final temCampoFoto =
+        usuario.containsKey('foto') || usuario.containsKey('profile_photo');
     final foto = usuario['foto'] ?? usuario['profile_photo'];
     if (temCampoFoto) {
       await AppSession.definirFotoPerfil(foto is String ? foto : null);
@@ -698,8 +702,11 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
         }
         if (dataValidade != null) {
           final hoje = DateTime.now();
-          if (DateTime(dataValidade.year, dataValidade.month, dataValidade.day)
-              .isBefore(DateTime(hoje.year, hoje.month, hoje.day))) {
+          if (DateTime(
+            dataValidade.year,
+            dataValidade.month,
+            dataValidade.day,
+          ).isBefore(DateTime(hoje.year, hoje.month, hoje.day))) {
             return 'Vencido';
           }
         }
@@ -708,8 +715,12 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
           'situacao',
           'status_documento',
         ]);
-        if ({'aprovado', 'approved', 'valid', 'valido'}
-                .contains(_normalizarStatus(status)) &&
+        if ({
+              'aprovado',
+              'approved',
+              'valid',
+              'valido',
+            }.contains(_normalizarStatus(status)) &&
             validade.isEmpty) {
           return 'Validade pendente';
         }
@@ -2388,7 +2399,7 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
         maxWidth: 1024,
       );
       if (arquivo == null) return;
-      final resposta = await ApiService.instance.uploadProfilePhoto(
+      final resposta = await _perfilRepository.subirFoto(
         await arquivo.readAsBytes(),
         filename: arquivo.name,
       );
@@ -2405,9 +2416,9 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2797,7 +2808,7 @@ class _MotoristaDashboardState extends State<MotoristaDashboard> {
 
   Future<void> _sair() async {
     try {
-      await ApiService.instance.logout();
+      await _perfilRepository.sair();
     } catch (_) {
       // Remove the local credentials if the server is unavailable.
     }
