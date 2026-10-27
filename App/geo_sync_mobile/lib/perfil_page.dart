@@ -31,6 +31,7 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
   String _telefone = "(19) 99999-9999";
   String _endereco = "Campinas - SP";
   Uint8List? _fotoBytes;
+  String? _fotoUrl;
 
   @override
   void initState() {
@@ -50,7 +51,10 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
         _email = '${usuario['email'] ?? _email}';
         _telefone = '${usuario['telefone'] ?? usuario['phone'] ?? _telefone}';
         _endereco = '${usuario['endereco'] ?? usuario['address'] ?? _endereco}';
+        final foto = usuario['foto'] ?? usuario['profile_photo'];
+        _fotoUrl = foto is String && foto.isNotEmpty ? foto : null;
       });
+      await AppSession.definirFotoPerfil(_fotoUrl);
     } on ApiException {
       // Mantém os dados locais enquanto a API estiver indisponível.
     }
@@ -305,33 +309,15 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
                                 telefone: _telefone,
                                 endereco: _endereco,
                                 fotoBytes: _fotoBytes,
+                                fotoUrl: _fotoUrl == null
+                                    ? null
+                                    : ApiService.instance.fotoUrl(_fotoUrl),
                               ),
                             ),
                           );
 
-                          if (resultado != null) {
-                            setState(() {
-                              _nome = resultado['nome'];
-                              _email = resultado['email'];
-                              _telefone = resultado['telefone'];
-                              _endereco = resultado['endereco'];
-                              _fotoBytes = resultado['fotoBytes'];
-                            });
-                            try {
-                              await ApiService.instance.updateProfile({
-                                'name': _nome,
-                                'email': _email,
-                                'telefone': _telefone,
-                                'endereco': _endereco,
-                              });
-                              if (mounted) {
-                                _mostrarSnackBar(
-                                  'Perfil atualizado no servidor.',
-                                );
-                              }
-                            } on ApiException catch (error) {
-                              if (mounted) _mostrarSnackBar(error.message);
-                            }
+                          if (resultado is Map) {
+                            await _salvarEdicaoPerfil(resultado);
                           }
                         },
                       ),
@@ -462,17 +448,80 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
     );
   }
 
+  Future<void> _salvarEdicaoPerfil(Map resultado) async {
+    final nome = '${resultado['nome'] ?? _nome}';
+    final email = '${resultado['email'] ?? _email}';
+    final telefone = '${resultado['telefone'] ?? _telefone}';
+    final endereco = '${resultado['endereco'] ?? _endereco}';
+    try {
+      await ApiService.instance.updateProfile({
+        'name': nome,
+        'email': email,
+        'telefone': telefone,
+      });
+      String? foto = _fotoUrl;
+      if (resultado['fotoAlterada'] == true) {
+        final bytes = resultado['fotoBytes'] as Uint8List?;
+        if (bytes == null) {
+          await ApiService.instance.deleteProfilePhoto();
+          foto = null;
+        } else {
+          final upload = await ApiService.instance.uploadProfilePhoto(
+            bytes,
+            filename: '${resultado['fotoNomeArquivo'] ?? 'perfil.jpg'}',
+          );
+          final data = upload['data'];
+          final fotoSalva = data is Map ? data['foto'] : upload['foto'];
+          foto = fotoSalva is String ? fotoSalva : null;
+        }
+        await AppSession.definirFotoPerfil(foto);
+      }
+      if (!mounted) return;
+      setState(() {
+        _nome = nome;
+        _email = email;
+        _telefone = telefone;
+        _endereco = endereco;
+        if (resultado['fotoAlterada'] == true) {
+          _fotoBytes = resultado['fotoBytes'] as Uint8List?;
+          _fotoUrl = foto;
+        }
+      });
+      await AppSession.atualizarDadosUsuario(nome: nome, email: email);
+      if (mounted) _mostrarSnackBar('Perfil atualizado no servidor.');
+    } on ApiException catch (error) {
+      if (mounted) _mostrarSnackBar(error.message);
+    }
+  }
+
   Future<void> _selecionarFoto(ImageSource source) async {
     try {
       final imagem = await ImagePicker().pickImage(
         source: source,
         imageQuality: 80,
+        maxWidth: 1024,
       );
       if (imagem == null) return;
       final bytes = await imagem.readAsBytes();
+      final upload = await ApiService.instance.uploadProfilePhoto(
+        bytes,
+        filename: imagem.name,
+      );
+      final data = upload['data'];
+      final foto = data is Map ? data['foto'] : upload['foto'];
+      if (foto is! String || foto.isEmpty) {
+        throw const ApiException('O servidor não retornou a foto salva.');
+      }
+      await AppSession.definirFotoPerfil(foto);
       if (!mounted) return;
-      setState(() => _fotoBytes = bytes);
+      setState(() {
+        _fotoBytes = bytes;
+        _fotoUrl = foto;
+      });
       _mostrarSnackBar('Foto de perfil atualizada.');
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      _mostrarSnackBar(error.message);
     } catch (_) {
       if (!mounted) return;
       _mostrarSnackBar('Não foi possível carregar a imagem.');
@@ -621,10 +670,15 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
                 ),
                 child: CircleAvatar(
                   backgroundColor: Color(0xFFEAF0FF),
-                  backgroundImage: _fotoBytes == null
+                  backgroundImage: _fotoBytes != null
+                      ? MemoryImage(_fotoBytes!)
+                      : _fotoUrl == null
                       ? null
-                      : MemoryImage(_fotoBytes!),
-                  child: _fotoBytes == null
+                      : NetworkImage(ApiService.instance.fotoUrl(_fotoUrl)),
+                  onBackgroundImageError: _fotoBytes != null || _fotoUrl != null
+                      ? (_, _) {}
+                      : null,
+                  child: _fotoBytes == null && _fotoUrl == null
                       ? const Icon(
                           CupertinoIcons.person,
                           size: 55,

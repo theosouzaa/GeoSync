@@ -252,7 +252,10 @@ void main() {
       final primeira = await SyncEngine.instance.sincronizar();
       expect(primeira.incremental, isFalse);
       expect(primeira.remessasRecebidas, 2);
-      expect(servidor.requisicoes.last, 'GET remessas/minhas');
+      expect(
+        servidor.requisicoes.last,
+        'GET remessas/minhas?per_page=100&page=1',
+      );
 
       servidor.avancar(const Duration(minutes: 1));
       servidor.salvarRemessa({

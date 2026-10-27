@@ -100,7 +100,10 @@ void main() {
   test('requisições autenticadas enviam o token Bearer', () async {
     await entrar();
     await SyncEngine.instance.sincronizar();
-    expect(servidor.requisicoes, contains('GET remessas/minhas'));
+    expect(
+      servidor.requisicoes.any((r) => r.startsWith('GET remessas/minhas')),
+      isTrue,
+    );
   });
 
   test('cada perfil recebe somente as remessas autorizadas pela API', () async {
@@ -136,7 +139,7 @@ void main() {
     final remessasCliente = await ApiService.instance.remessasAutorizadas();
     expect(remessasCliente.map((r) => r['id']), [80]);
     expect(
-      servidor.requisicoes.where((r) => r == 'GET remessas/minhas'),
+      servidor.requisicoes.where((r) => r.startsWith('GET remessas/minhas')),
       hasLength(2),
     );
   });

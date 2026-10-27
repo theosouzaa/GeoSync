@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/services/api_exception.dart';
 import 'package:mobile/services/api_service.dart';
 import 'package:mobile/services/notification_center.dart';
@@ -69,6 +70,61 @@ class _TelaAlertasState extends State<TelaAlertas> {
   // ============================================================
 
   String filtroSelecionado = "Todos";
+  final TextEditingController _buscaController = TextEditingController();
+
+  String _chaveStatus(Object? status) => '$status'
+      .trim()
+      .toLowerCase()
+      .replaceAll('\u00c3\u00a1', 'a')
+      .replaceAll('\u00c3\u00a3', 'a')
+      .replaceAll('\u00c3\u00a2', 'a')
+      .replaceAll('\u00c3\u00a9', 'e')
+      .replaceAll('\u00c3\u00aa', 'e')
+      .replaceAll('\u00c3\u00ad', 'i')
+      .replaceAll('\u00c3\u00b3', 'o')
+      .replaceAll('\u00c3\u00b4', 'o')
+      .replaceAll('\u00c3\u00b5', 'o')
+      .replaceAll('\u00c3\u00ba', 'u')
+      .replaceAll('\u00c3\u00a7', 'c')
+      .replaceAll('\u00e1', 'a')
+      .replaceAll('\u00e3', 'a')
+      .replaceAll('\u00e2', 'a')
+      .replaceAll('\u00e9', 'e')
+      .replaceAll('\u00ea', 'e')
+      .replaceAll('\u00ed', 'i')
+      .replaceAll('\u00f3', 'o')
+      .replaceAll('\u00f4', 'o')
+      .replaceAll('\u00f5', 'o')
+      .replaceAll('\u00fa', 'u')
+      .replaceAll('\u00e7', 'c')
+      .replaceAll('_', ' ')
+      .replaceAll('-', ' ');
+
+  String _statusExibicao(Object? status) {
+    final chave = _chaveStatus(status);
+    if (chave.contains('critic') ||
+        chave.contains('critical') ||
+        chave.contains('high') ||
+        chave.contains('severe') ||
+        chave.contains('alta')) {
+      return 'Cr\u00edtico';
+    }
+    if (chave.contains('atenc') ||
+        chave.contains('warning') ||
+        chave.contains('attention') ||
+        chave.contains('medium') ||
+        chave.contains('moderad') ||
+        chave == 'media') {
+      return 'Aten\u00e7\u00e3o';
+    }
+    if (chave.contains('inform') ||
+        chave.contains('info') ||
+        chave.contains('low') ||
+        chave.contains('baixa')) {
+      return 'Informativo';
+    }
+    return '${status ?? 'Informativo'}';
+  }
 
   // ============================================================
   // LISTA DE ALERTAS
@@ -81,13 +137,26 @@ class _TelaAlertasState extends State<TelaAlertas> {
   @override
   void initState() {
     super.initState();
+    _buscaController.addListener(_atualizarBusca);
     _carregarAlertas();
+  }
+
+  @override
+  void dispose() {
+    _buscaController
+      ..removeListener(_atualizarBusca)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _atualizarBusca() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _carregarAlertas({bool forceRefresh = false}) async {
     if (mounted) {
       setState(() {
-        _carregando = true;
+        _carregando = alertas.isEmpty;
         _erro = null;
       });
     }
@@ -106,7 +175,15 @@ class _TelaAlertasState extends State<TelaAlertas> {
     } on ApiException catch (error) {
       if (!mounted) return;
       setState(() {
-        _erro = error.message;
+        _erro = alertas.isEmpty ? error.message : null;
+        _carregando = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _erro = alertas.isEmpty
+            ? 'Não foi possível carregar os alertas.'
+            : null;
         _carregando = false;
       });
     }
@@ -119,8 +196,8 @@ class _TelaAlertasState extends State<TelaAlertas> {
         '${value['descricao'] ?? value['description'] ?? value['mensagem'] ?? '-'}',
     local: '${value['local'] ?? value['localizacao'] ?? '-'}',
     horario: '${value['horario'] ?? value['created_at'] ?? '-'}',
-    status: '${value['status'] ?? value['gravidade'] ?? 'Informativo'}',
-    icone: CupertinoIcons.exclamationmark_triangle,
+    status: _statusExibicao(value['status'] ?? value['gravidade']),
+    icone: _iconeStatus(_statusExibicao(value['status'] ?? value['gravidade'])),
     lido:
         value['lido'] == true ||
         value['read'] == true ||
@@ -165,30 +242,84 @@ class _TelaAlertasState extends State<TelaAlertas> {
   // ============================================================
 
   List<Alerta> get alertasFiltrados {
-    if (filtroSelecionado == "Todos") {
-      return alertas;
-    }
+    final filtro = _chaveStatus(filtroSelecionado);
+    final busca = _buscaController.text.trim().toLowerCase();
+    final resultado = alertas.where((alerta) {
+      final correspondeFiltro =
+          filtro == 'todos' || _chaveStatus(alerta.status) == filtro;
+      final correspondeBusca =
+          busca.isEmpty ||
+          alerta.titulo.toLowerCase().contains(busca) ||
+          alerta.descricao.toLowerCase().contains(busca) ||
+          alerta.local.toLowerCase().contains(busca);
+      return correspondeFiltro && correspondeBusca;
+    }).toList();
 
-    return alertas
-        .where((alerta) => alerta.status == filtroSelecionado)
-        .toList();
+    resultado.sort((a, b) {
+      if (a.lido != b.lido) return a.lido ? 1 : -1;
+      final prioridade = _prioridadeStatus(
+        a.status,
+      ).compareTo(_prioridadeStatus(b.status));
+      if (prioridade != 0) return prioridade;
+      final horarioA = DateTime.tryParse(a.horario)?.toLocal();
+      final horarioB = DateTime.tryParse(b.horario)?.toLocal();
+      if (horarioA == null) return horarioB == null ? 0 : 1;
+      if (horarioB == null) return -1;
+      return horarioB.compareTo(horarioA);
+    });
+    return resultado;
+  }
+
+  int _prioridadeStatus(String status) {
+    switch (_chaveStatus(status)) {
+      case 'critico':
+      case 'critical':
+        return 0;
+      case 'atencao':
+      case 'warning':
+        return 1;
+      default:
+        return 2;
+    }
+  }
+
+  String _horarioLegivel(String valor) {
+    final data = DateTime.tryParse(valor)?.toLocal();
+    if (data == null) return valor;
+    final agora = DateTime.now();
+    final hoje =
+        data.year == agora.year &&
+        data.month == agora.month &&
+        data.day == agora.day;
+    final ontem =
+        DateTime(
+          agora.year,
+          agora.month,
+          agora.day,
+        ).difference(DateTime(data.year, data.month, data.day)).inDays ==
+        1;
+    final hora =
+        '${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}';
+    if (hoje) return 'Hoje, $hora';
+    if (ontem) return 'Ontem, $hora';
+    return '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')} · $hora';
   }
 
   // ============================================================
   // CONTADORES
   // ============================================================
 
-  int get quantidadeCriticos {
-    return alertas.where((alerta) => alerta.status == "Crítico").length;
-  }
+  int get quantidadeCriticos => alertas
+      .where((alerta) => _chaveStatus(alerta.status) == 'critico')
+      .length;
 
-  int get quantidadeAtencao {
-    return alertas.where((alerta) => alerta.status == "Atenção").length;
-  }
+  int get quantidadeAtencao => alertas
+      .where((alerta) => _chaveStatus(alerta.status) == 'atencao')
+      .length;
 
-  int get quantidadeInformativos {
-    return alertas.where((alerta) => alerta.status == "Informativo").length;
-  }
+  int get quantidadeInformativos => alertas
+      .where((alerta) => _chaveStatus(alerta.status) == 'informativo')
+      .length;
 
   // ============================================================
   // BUILD
@@ -209,34 +340,44 @@ class _TelaAlertasState extends State<TelaAlertas> {
                   ? const Center(child: CircularProgressIndicator())
                   : _erro != null
                   ? _buildErro()
-                  : ListView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
-                      children: [
-                        const SizedBox(height: 20),
+                  : RefreshIndicator(
+                      color: primary,
+                      onRefresh: () => _carregarAlertas(forceRefresh: true),
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
+                        children: [
+                          const SizedBox(height: 20),
 
-                        _buildResumo(),
+                          _buildResumo(),
 
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 24),
 
-                        _buildTituloSecao(),
+                          _buildTituloSecao(),
 
-                        const SizedBox(height: 12),
+                          const SizedBox(height: 16),
 
-                        _buildFiltros(),
+                          _buildCampoBusca(),
 
-                        const SizedBox(height: 18),
+                          const SizedBox(height: 12),
 
-                        if (alertasFiltrados.isEmpty)
-                          _buildEstadoVazio()
-                        else
-                          ...alertasFiltrados.map(
-                            (alerta) => Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: _buildAlertaCard(alerta),
+                          _buildFiltros(),
+
+                          const SizedBox(height: 18),
+
+                          if (alertasFiltrados.isEmpty)
+                            _buildEstadoVazio()
+                          else
+                            ...alertasFiltrados.map(
+                              (alerta) => Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: _buildAlertaCard(alerta),
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
             ),
           ],
@@ -286,7 +427,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
                   ),
                 ),
                 child: const Icon(
-                  CupertinoIcons.bell,
+                  LucideIcons.bellRing,
                   color: Colors.white,
                   size: 26,
                 ),
@@ -338,7 +479,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
                 ),
                 SizedBox(height: 3),
                 Text(
-                  "Acompanhe sua frota em tempo real",
+                  "Avisos das suas remessas",
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -362,7 +503,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
                   child: const Padding(
                     padding: EdgeInsets.all(12),
                     child: Icon(
-                      CupertinoIcons.checkmark_alt,
+                      LucideIcons.checkCheck,
                       color: Colors.white,
                       size: 22,
                     ),
@@ -385,7 +526,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
               child: const Padding(
                 padding: EdgeInsets.all(12),
                 child: Icon(
-                  CupertinoIcons.arrow_clockwise,
+                  LucideIcons.refreshCw,
                   color: Colors.white,
                   size: 22,
                 ),
@@ -428,7 +569,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
           child: _buildResumoCard(
             titulo: "Total",
             valor: alertas.length.toString(),
-            icone: CupertinoIcons.bell,
+            icone: LucideIcons.bell,
             cor: primary,
           ),
         ),
@@ -437,9 +578,9 @@ class _TelaAlertasState extends State<TelaAlertas> {
 
         Expanded(
           child: _buildResumoCard(
-            titulo: "Críticos",
+            titulo: "Cr\u00edticos",
             valor: quantidadeCriticos.toString(),
-            icone: CupertinoIcons.exclamationmark_triangle,
+            icone: LucideIcons.triangleAlert,
             cor: const Color(0xFFD64545),
           ),
         ),
@@ -448,9 +589,9 @@ class _TelaAlertasState extends State<TelaAlertas> {
 
         Expanded(
           child: _buildResumoCard(
-            titulo: "Atenção",
+            titulo: "Aten\u00e7\u00e3o",
             valor: quantidadeAtencao.toString(),
-            icone: CupertinoIcons.exclamationmark,
+            icone: LucideIcons.circleAlert,
             cor: const Color(0xFFE58A00),
           ),
         ),
@@ -465,49 +606,51 @@ class _TelaAlertasState extends State<TelaAlertas> {
     required Color cor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(13),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: border),
+        color: cor.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cor.withValues(alpha: 0.14)),
         boxShadow: [
           BoxShadow(
-            color: primaryDark.withValues(alpha: 0.035),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
+            color: primaryDark.withValues(alpha: 0.025),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: cor.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icone, color: cor, size: 18),
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: cor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icone, color: cor, size: 18),
+              ),
+              const Spacer(),
+              Text(
+                valor,
+                style: TextStyle(
+                  color: textDark,
+                  fontSize: 23,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
           ),
-
-          const SizedBox(height: 10),
-
-          Text(
-            valor,
-            style: TextStyle(
-              color: textDark,
-              fontSize: 21,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 2),
+          const SizedBox(height: 12),
 
           Text(
             titulo,
-            style: const TextStyle(
-              color: textLight,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -525,15 +668,41 @@ class _TelaAlertasState extends State<TelaAlertas> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Central de alertas",
-          style: TextStyle(
-            color: textDark,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                "Central de alertas",
+                style: TextStyle(
+                  color: textDark,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+            if (_quantidadeNaoLidos > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$_quantidadeNaoLidos n\u00e3o lidos',
+                  style: const TextStyle(
+                    color: primary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
         ),
-        SizedBox(height: 3),
+        const SizedBox(height: 4),
         Text(
           "Filtre os eventos para encontrar rapidamente o que precisa.",
           style: TextStyle(color: textLight, fontSize: 12),
@@ -554,15 +723,56 @@ class _TelaAlertasState extends State<TelaAlertas> {
         children: [
           _buildFiltro(texto: "Todos", quantidade: alertas.length),
 
-          _buildFiltro(texto: "Crítico", quantidade: quantidadeCriticos),
+          _buildFiltro(texto: "Cr\u00edtico", quantidade: quantidadeCriticos),
 
-          _buildFiltro(texto: "Atenção", quantidade: quantidadeAtencao),
+          _buildFiltro(
+            texto: "Aten\u00e7\u00e3o",
+            quantidade: quantidadeAtencao,
+          ),
 
           _buildFiltro(
             texto: "Informativo",
             quantidade: quantidadeInformativos,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCampoBusca() {
+    final scheme = Theme.of(context).colorScheme;
+    return TextField(
+      controller: _buscaController,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: 'Buscar por título, descrição ou local',
+        hintStyle: TextStyle(
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
+          fontSize: 13,
+        ),
+        prefixIcon: const Icon(LucideIcons.search, size: 19),
+        suffixIcon: _buscaController.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Limpar busca',
+                onPressed: _buscaController.clear,
+                icon: const Icon(LucideIcons.x, size: 18),
+              ),
+        filled: true,
+        fillColor: surface,
+        contentPadding: const EdgeInsets.symmetric(vertical: 15),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17),
+          borderSide: BorderSide(color: border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17),
+          borderSide: BorderSide(color: border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17),
+          borderSide: const BorderSide(color: primary, width: 1.5),
+        ),
       ),
     );
   }
@@ -574,63 +784,76 @@ class _TelaAlertasState extends State<TelaAlertas> {
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            filtroSelecionado = texto;
-          });
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: selecionado ? cor : surface,
+      child: Semantics(
+        button: true,
+        selected: selecionado,
+        label: 'Filtro $texto, $quantidade alertas',
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
+          child: InkWell(
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: selecionado ? cor : border),
-            boxShadow: selecionado
-                ? [
-                    BoxShadow(
-                      color: cor.withValues(alpha: 0.20),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            children: [
-              Text(
-                texto,
-                style: TextStyle(
-                  color: selecionado ? Colors.white : textDark,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-
-              const SizedBox(width: 7),
-
-              Container(
-                constraints: const BoxConstraints(minWidth: 21, minHeight: 21),
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 5),
-                decoration: BoxDecoration(
-                  color: selecionado
-                      ? Colors.white.withValues(alpha: 0.20)
-                      : cor.withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  quantidade.toString(),
+          onTap: () {
+            setState(() {
+              filtroSelecionado = texto;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              color: selecionado ? cor : surface,
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: selecionado ? cor : border),
+              boxShadow: selecionado
+                  ? [
+                      BoxShadow(
+                        color: cor.withValues(alpha: 0.20),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Text(
+                  texto,
                   style: TextStyle(
-                    color: selecionado ? Colors.white : cor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+                    color: selecionado ? Colors.white : textDark,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
                   ),
                 ),
-              ),
-            ],
+
+                const SizedBox(width: 7),
+
+                Container(
+                  constraints: const BoxConstraints(
+                    minWidth: 21,
+                    minHeight: 21,
+                  ),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: selecionado
+                        ? Colors.white.withValues(alpha: 0.20)
+                        : cor.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    quantidade.toString(),
+                    style: TextStyle(
+                      color: selecionado ? Colors.white : cor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           ),
         ),
       ),
@@ -647,16 +870,18 @@ class _TelaAlertasState extends State<TelaAlertas> {
 
     return Container(
       decoration: BoxDecoration(
-        color: naoLido ? cor.withValues(alpha: 0.045) : surface,
+        color: naoLido
+            ? Color.alphaBlend(cor.withValues(alpha: 0.035), surface)
+            : surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: naoLido ? cor.withValues(alpha: 0.35) : border,
+          color: naoLido ? cor.withValues(alpha: 0.28) : border,
         ),
         boxShadow: [
           BoxShadow(
-            color: primaryDark.withValues(alpha: 0.045),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
+            color: primaryDark.withValues(alpha: naoLido ? 0.055 : 0.025),
+            blurRadius: naoLido ? 18 : 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -680,13 +905,17 @@ class _TelaAlertasState extends State<TelaAlertas> {
                     // ÍCONE
                     // ==================================================
                     Container(
-                      width: 50,
-                      height: 50,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
-                        color: cor.withValues(alpha: 0.09),
-                        borderRadius: BorderRadius.circular(14),
+                        color: cor.withValues(alpha: 0.11),
+                        borderRadius: BorderRadius.circular(15),
                       ),
-                      child: Icon(alerta.icone, color: cor, size: 25),
+                      child: Icon(
+                        _iconeStatus(alerta.status),
+                        color: cor,
+                        size: 22,
+                      ),
                     ),
 
                     const SizedBox(width: 13),
@@ -728,17 +957,32 @@ class _TelaAlertasState extends State<TelaAlertas> {
                               const SizedBox(width: 6),
 
                               ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 80),
-                                child: Text(
-                                  alerta.horario,
-                                  textAlign: TextAlign.right,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: textLight,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 112,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    const Icon(
+                                      LucideIcons.clock3,
+                                      color: textLight,
+                                      size: 12,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        _horarioLegivel(alerta.horario),
+                                        textAlign: TextAlign.right,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: textLight,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -776,11 +1020,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
                         color: cor.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(9),
                       ),
-                      child: Icon(
-                        CupertinoIcons.placemark,
-                        color: cor,
-                        size: 17,
-                      ),
+                      child: Icon(LucideIcons.mapPin, color: cor, size: 17),
                     ),
 
                     const SizedBox(width: 8),
@@ -800,30 +1040,11 @@ class _TelaAlertasState extends State<TelaAlertas> {
 
                     const SizedBox(width: 8),
 
-                    // STATUS
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 100),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: cor.withValues(alpha: 0.09),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          alerta.status,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: cor,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildEtiqueta(alerta.status, cor),
+                    if (naoLido) ...[
+                      const SizedBox(width: 6),
+                      _buildEtiqueta('Novo', primary),
+                    ],
                   ],
                 ),
               ],
@@ -834,41 +1055,80 @@ class _TelaAlertasState extends State<TelaAlertas> {
     );
   }
 
+  Widget _buildEtiqueta(String texto, Color cor) => Container(
+    constraints: const BoxConstraints(maxWidth: 92),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+    decoration: BoxDecoration(
+      color: cor.withValues(alpha: 0.09),
+      borderRadius: BorderRadius.circular(30),
+      border: Border.all(color: cor.withValues(alpha: 0.12)),
+    ),
+    child: Text(
+      texto,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: cor, fontSize: 10, fontWeight: FontWeight.w800),
+    ),
+  );
+
   // ============================================================
   // ESTADO VAZIO
   // ============================================================
 
   Widget _buildEstadoVazio() {
+    final filtrando =
+        _buscaController.text.trim().isNotEmpty || filtroSelecionado != 'Todos';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 45),
       decoration: BoxDecoration(
         color: surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: border.withValues(alpha: 0.8)),
       ),
       child: Column(
         children: [
-          Icon(CupertinoIcons.bell, color: textLight, size: 52),
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              color: primary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(LucideIcons.bellOff, color: primary, size: 34),
+          ),
 
-          SizedBox(height: 14),
+          const SizedBox(height: 16),
 
           Text(
-            "Nenhum alerta encontrado",
+            filtrando ? 'Nenhum alerta encontrado' : 'Tudo em dia por aqui',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: textDark,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
             ),
           ),
 
           SizedBox(height: 5),
 
           Text(
-            "Não existem alertas para o filtro selecionado.",
+            filtrando
+                ? 'Tente outro termo ou remova os filtros aplicados.'
+                : 'Quando houver um aviso importante, ele aparecerá aqui.',
             textAlign: TextAlign.center,
             style: TextStyle(color: textLight, fontSize: 12),
           ),
+          if (filtrando) ...[
+            const SizedBox(height: 14),
+            TextButton.icon(
+              onPressed: () {
+                _buscaController.clear();
+                setState(() => filtroSelecionado = 'Todos');
+              },
+              icon: const Icon(LucideIcons.listFilter, size: 17),
+              label: const Text('Limpar busca e filtros'),
+            ),
+          ],
         ],
       ),
     );
@@ -879,24 +1139,27 @@ class _TelaAlertasState extends State<TelaAlertas> {
   // ============================================================
 
   Color _corStatus(String status) {
-    switch (status) {
-      case "Crítico":
-        return const Color(0xFFD64545);
-
-      case "Atenção":
-        return const Color(0xFFE58A00);
-
-      case "Informativo":
-        return primary;
-
-      case "Todos":
-        return primaryDark;
-
-      default:
-        return primary;
+    final chave = _chaveStatus(status);
+    if (chave == 'critico' || chave == 'critical') {
+      return const Color(0xFFDC3F52);
     }
+    if (chave == 'atencao' || chave == 'warning') {
+      return const Color(0xFFD88713);
+    }
+    if (chave == 'todos') return primaryDark;
+    return primary;
   }
 
+  IconData _iconeStatus(String status) {
+    final chave = _chaveStatus(status);
+    if (chave == 'critico' || chave == 'critical') {
+      return LucideIcons.triangleAlert;
+    }
+    if (chave == 'atencao' || chave == 'warning') {
+      return LucideIcons.circleAlert;
+    }
+    return LucideIcons.info;
+  }
   // ============================================================
   // DETALHES DO ALERTA
   // ============================================================
@@ -908,98 +1171,95 @@ class _TelaAlertasState extends State<TelaAlertas> {
       context: context,
       backgroundColor: surface,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: border,
-                    borderRadius: BorderRadius.circular(10),
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: border,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 22),
+                const SizedBox(height: 22),
 
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: cor.withValues(alpha: 0.09),
-                      borderRadius: BorderRadius.circular(14),
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: cor.withValues(alpha: 0.09),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(_iconeStatus(alerta.status), color: cor),
                     ),
-                    child: Icon(alerta.icone, color: cor),
-                  ),
 
-                  const SizedBox(width: 12),
+                    const SizedBox(width: 12),
 
-                  Expanded(
-                    child: Text(
-                      alerta.titulo,
-                      style: TextStyle(
-                        color: textDark,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        alerta.titulo,
+                        style: TextStyle(
+                          color: textDark,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
 
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
 
-              _buildDetalhe(
-                CupertinoIcons.doc_text,
-                "Descrição",
-                alerta.descricao,
-              ),
+                _buildDetalhe(
+                  LucideIcons.fileText,
+                  "Descrição",
+                  alerta.descricao,
+                ),
 
-              _buildDetalhe(
-                CupertinoIcons.placemark,
-                "Localização",
-                alerta.local,
-              ),
+                _buildDetalhe(LucideIcons.mapPin, "Localização", alerta.local),
 
-              _buildDetalhe(CupertinoIcons.clock, "Horário", alerta.horario),
+                _buildDetalhe(LucideIcons.clock3, "Horário", alerta.horario),
 
-              _buildDetalhe(CupertinoIcons.flag, "Status", alerta.status),
+                _buildDetalhe(LucideIcons.flag, "Status", alerta.status),
 
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryDark,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: primaryDark,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      minimumSize: const Size.fromHeight(50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    child: const Text(
+                      "Fechar",
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
-                  child: const Text(
-                    "Fechar",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -1012,7 +1272,15 @@ class _TelaAlertasState extends State<TelaAlertas> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icone, color: primary, size: 20),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(icone, color: primary, size: 18),
+          ),
 
           const SizedBox(width: 10),
 

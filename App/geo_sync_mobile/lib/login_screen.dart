@@ -59,6 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
           tipoUsuario: tipo,
           email: '${usuario['email'] ?? _emailController.text}',
           nome: '${usuario['name'] ?? usuario['nome'] ?? ''}',
+          fotoPerfil: usuario['foto'] as String?,
         );
         if (!mounted) return;
         final destino = tipo == 'Cliente'

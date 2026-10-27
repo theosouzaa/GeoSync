@@ -23,6 +23,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('auth/me', [AuthControllerApi::class, 'me']);
     Route::post('auth/logout', [AuthControllerApi::class, 'logout']);
     Route::put('perfil', [AuthControllerApi::class, 'updateProfile']);
+    Route::post('perfil/foto', [AuthControllerApi::class, 'uploadProfilePhoto']);
+    Route::delete('perfil/foto', [AuthControllerApi::class, 'deleteProfilePhoto']);
 
     Route::get('motorista/documentos', [MotoristaDocumentoControllerApi::class, 'index']);
     Route::post('motorista/documentos/{tipo}', [MotoristaDocumentoControllerApi::class, 'store']);

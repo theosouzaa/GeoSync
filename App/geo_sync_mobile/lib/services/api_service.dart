@@ -383,6 +383,73 @@ class ApiService {
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async =>
       _map(await _request('PUT', 'perfil', body: data, authenticated: true));
 
+  Future<Map<String, dynamic>> uploadProfilePhoto(
+    Uint8List bytes, {
+    String filename = 'perfil.jpg',
+  }) async {
+    final request = http.MultipartRequest('POST', _uri('perfil/foto'))
+      ..headers['Accept'] = 'application/json';
+    if (AppSession.token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer ${AppSession.token}';
+    }
+    request.files.add(
+      http.MultipartFile.fromBytes('foto', bytes, filename: filename),
+    );
+
+    try {
+      final streamed = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
+      final response = await http.Response.fromStream(streamed);
+      dynamic data;
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } on FormatException {
+          data = response.body;
+        }
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (response.statusCode == 401) await AppSession.encerrarSessao();
+        throw ApiException(
+          _messageFrom(data, response.statusCode),
+          statusCode: response.statusCode,
+        );
+      }
+      return _map(data);
+    } on ApiException {
+      rethrow;
+    } on http.ClientException {
+      throw ApiConnectionException(
+        'Não foi possível enviar a foto. Verifique sua conexão.',
+      );
+    } on TimeoutException {
+      throw ApiConnectionException(
+        'O envio da foto demorou para responder. Tente novamente.',
+      );
+    }
+  }
+
+  Future<void> deleteProfilePhoto() async {
+    await _request('DELETE', 'perfil/foto', authenticated: true);
+  }
+
+  String fotoUrl(String? caminho) {
+    final valor = caminho?.trim() ?? '';
+    if (valor.isEmpty) return '';
+    final recebido = Uri.tryParse(valor);
+    if (recebido != null && recebido.hasScheme) return valor;
+    final base = Uri.parse(_normalizeBaseUrl(baseUrl));
+    final segmentos = [...base.pathSegments];
+    if (segmentos.isNotEmpty && segmentos.last.toLowerCase() == 'api') {
+      segmentos.removeLast();
+    }
+    segmentos.addAll(
+      valor.split('/').where((segmento) => segmento.isNotEmpty),
+    );
+    return base.replace(pathSegments: segmentos).toString();
+  }
+
   /// Requisição autenticada genérica, usada pelo motor de sincronização.
   Future<dynamic> requisicao(
     String method,

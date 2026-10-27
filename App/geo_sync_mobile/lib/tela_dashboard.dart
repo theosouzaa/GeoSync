@@ -9,6 +9,7 @@ import 'package:mobile/perfil_page.dart';
 import 'package:mobile/remessa_page.dart' hide RemessaCard;
 import 'package:mobile/mapa_page.dart';
 import 'package:mobile/services/api_service.dart';
+import 'package:mobile/services/shipment_progress.dart';
 import 'package:mobile/services/notification_center.dart';
 import 'package:mobile/widgets/data_state_widgets.dart';
 import 'alerta_page.dart';
@@ -45,6 +46,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
   List<Alerta> _alertas = [];
   double? _saldoMovimentado;
   double? _avaliacaoMedia;
+  Timer? _timerRemessas;
 
   String _normalizarStatus(String status) => status
       .trim()
@@ -82,6 +84,11 @@ class _TelaDashboardState extends State<TelaDashboard> {
   void initState() {
     super.initState();
     _carregarResumo();
+    _timerRemessas = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_currentIndex == 0 && !_carregandoResumo) {
+        _atualizarRemessasEmTempoReal();
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       AppNotificationCenter.instance.attach(
@@ -93,8 +100,15 @@ class _TelaDashboardState extends State<TelaDashboard> {
 
   @override
   void dispose() {
+    _timerRemessas?.cancel();
     AppNotificationCenter.instance.detach();
     super.dispose();
+  }
+
+  Future<void> _atualizarRemessasEmTempoReal() async {
+    final dados = await _carregarRemessas();
+    if (!mounted) return;
+    setState(() => _remessas = dados);
   }
 
   Future<void> _carregarResumo() async {
@@ -130,21 +144,25 @@ class _TelaDashboardState extends State<TelaDashboard> {
     try {
       // A API decide quais remessas pertencem à sessão autenticada.
       final dados = await ApiService.instance.remessasAutorizadas();
+      _falhaRemessas = false;
       return dados.whereType<Map>().map((value) {
-        final progresso = value['progresso'] ?? value['progress'] ?? 0;
+        final status =
+            '${value['status'] ?? value['situacao'] ?? 'Aguardando coleta'}';
         return Remessa(
-          codigo: '${value['codigo'] ?? value['code'] ?? value['id'] ?? '-'}',
-          status:
-              '${value['status'] ?? value['situacao'] ?? 'Aguardando coleta'}',
+          id: value['id'] ?? value['remessa_id'],
+          codigo:
+              '${value['codigo_rastreio'] ?? value['codigo'] ?? value['code'] ?? value['id'] ?? '-'}',
+          status: status,
           origem: '${value['origem'] ?? value['origin'] ?? '-'}',
           destino: '${value['destino'] ?? value['destination'] ?? '-'}',
           tipo:
               '${value['tipo'] ?? value['tipo_carga'] ?? value['cargo'] ?? '-'}',
           peso: '${value['peso'] ?? value['weight'] ?? '-'}',
           eta: '${value['eta'] ?? value['previsao_entrega'] ?? '-'}',
-          progresso: progresso is num
-              ? progresso.toDouble().clamp(0.0, 1.0)
-              : 0,
+          progresso: shipmentProgress(
+            status: status,
+            apiProgress: value['progresso'] ?? value['progress'],
+          ),
         );
       }).toList();
     } catch (_) {
@@ -443,10 +461,13 @@ class _TelaDashboardState extends State<TelaDashboard> {
       label:
           'Abrir perfil de ${AppSession.nome.isEmpty ? 'usuário' : AppSession.nome}',
       child: GestureDetector(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const PerfilClientePage()),
-        ),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PerfilClientePage()),
+          );
+          if (mounted) setState(() {});
+        },
         child: Container(
           width: 48,
           height: 48,
@@ -454,15 +475,34 @@ class _TelaDashboardState extends State<TelaDashboard> {
             color: scheme.primaryContainer,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Center(
-            child: Text(
-              AppSession.inicialNome,
-              style: TextStyle(
-                color: scheme.onPrimaryContainer,
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: AppSession.fotoPerfil == null
+                ? Center(
+                    child: Text(
+                      AppSession.inicialNome,
+                      style: TextStyle(
+                        color: scheme.onPrimaryContainer,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  )
+                : Image.network(
+                    ApiService.instance.fotoUrl(AppSession.fotoPerfil),
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Center(
+                      child: Text(
+                        AppSession.inicialNome,
+                        style: TextStyle(
+                          color: scheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         ),
       ),
@@ -1687,7 +1727,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
           Row(
             children: [
               Text(
-                "Progresso da entrega",
+                "Progresso pela etapa",
                 style: TextStyle(color: textLight, fontSize: 9),
               ),
 

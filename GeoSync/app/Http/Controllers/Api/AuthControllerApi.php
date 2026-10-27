@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Hash;
 use App\Models\Pagamento;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 
 class AuthControllerApi extends Controller
 {
@@ -87,6 +88,63 @@ class AuthControllerApi extends Controller
         if (isset($data['password'])) $data['password'] = Hash::make($data['password']);
         $user->update($data);
         return response()->json(['success' => true, 'message' => 'Perfil atualizado.', 'data' => $user->fresh()]);
+    }
+
+    public function uploadProfilePhoto(Request $request)
+    {
+        $request->validate([
+            'foto' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        $user = $request->user();
+        $diretorio = public_path('uploads/perfis');
+        if (!is_dir($diretorio)) {
+            mkdir($diretorio, 0755, true);
+        }
+
+        $arquivo = $request->file('foto');
+        $extensao = strtolower($arquivo->getClientOriginalExtension() ?: 'jpg');
+        $nome = Str::uuid()->toString().'.'.$extensao;
+        $arquivo->move($diretorio, $nome);
+        $fotoAnterior = $user->foto;
+        $caminho = 'uploads/perfis/'.$nome;
+
+        $user->foto = $caminho;
+        $user->save();
+
+        if (is_string($fotoAnterior) && str_starts_with($fotoAnterior, 'uploads/perfis/')) {
+            $arquivoAnterior = public_path('uploads/perfis/'.basename($fotoAnterior));
+            if (is_file($arquivoAnterior)) {
+                @unlink($arquivoAnterior);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Foto do perfil atualizada.',
+            'data' => ['foto' => $user->foto],
+        ]);
+    }
+
+    public function deleteProfilePhoto(Request $request)
+    {
+        $user = $request->user();
+        $fotoAnterior = $user->foto;
+        $user->foto = null;
+        $user->save();
+
+        if (is_string($fotoAnterior) && str_starts_with($fotoAnterior, 'uploads/perfis/')) {
+            $arquivoAnterior = public_path('uploads/perfis/'.basename($fotoAnterior));
+            if (is_file($arquivoAnterior)) {
+                @unlink($arquivoAnterior);
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Foto do perfil removida.',
+            'data' => ['foto' => null],
+        ]);
     }
 
     private function authenticated(User $user, int $status = 200)

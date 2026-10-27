@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile/services/api_exception.dart';
 import 'package:mobile/services/api_service.dart';
 import 'package:mobile/services/eta_service.dart';
+import 'package:mobile/services/shipment_progress.dart';
 import 'package:mobile/app_session.dart';
 import 'package:mobile/sync/location_point.dart';
 import 'package:mobile/sync/pending_queue.dart';
@@ -122,6 +124,8 @@ class _RemessasPageState extends State<RemessasPage> {
   String? _erroDisponiveis;
   bool _apiDisponivel = false;
   bool _dadosDesatualizados = false;
+  Timer? _timerAtualizacao;
+  bool _atualizandoPeriodicamente = false;
   String? get _erroAtual => _modoDisponiveis ? _erroDisponiveis : _erroRemessas;
   List<Remessa> get _listaAtual => _modoDisponiveis ? disponiveis : remessas;
 
@@ -188,6 +192,13 @@ class _RemessasPageState extends State<RemessasPage> {
       setState(() {});
     });
     _carregarRemessas(forceRefresh: true);
+    _timerAtualizacao = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_atualizandoPeriodicamente || !mounted) return;
+      _atualizandoPeriodicamente = true;
+      _carregarRemessas(forceRefresh: true).whenComplete(() {
+        _atualizandoPeriodicamente = false;
+      });
+    });
   }
 
   Future<void> _carregarRemessas({bool forceRefresh = true}) async {
@@ -267,17 +278,12 @@ class _RemessasPageState extends State<RemessasPage> {
     }
 
     final rawProgress = campo(['progresso', 'progress', 'percentual']) ?? 0;
-    final progress = rawProgress is num
-        ? rawProgress.toDouble()
-        : double.tryParse(
-                '$rawProgress'.replaceAll('%', '').replaceAll(',', '.'),
-              ) ??
-              0;
-    final normalizedProgress = progress > 1 ? progress / 100 : progress;
+    final status =
+        '${campo(['status', 'situacao', 'status_name']) ?? 'Status não informado'}';
     return Remessa(
-      codigo: '${campo(['codigo', 'code', 'tracking_code', 'id']) ?? '-'}',
-      status:
-          '${campo(['status', 'situacao', 'status_name']) ?? 'Status não informado'}',
+      codigo:
+          '${campo(['codigo', 'codigo_rastreio', 'code', 'tracking_code', 'id']) ?? '-'}',
+      status: status,
       origem:
           '${campo(['origem', 'origin', 'remetente_endereco', 'pickup_address']) ?? '-'}',
       destino:
@@ -298,7 +304,7 @@ class _RemessasPageState extends State<RemessasPage> {
           'delivery_date',
         ]),
       ),
-      progresso: normalizedProgress.clamp(0.0, 1.0).toDouble(),
+      progresso: shipmentProgress(status: status, apiProgress: rawProgress),
       id: campo([
         'id',
         'remessa_id',
@@ -348,6 +354,7 @@ class _RemessasPageState extends State<RemessasPage> {
 
   @override
   void dispose() {
+    _timerAtualizacao?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -394,7 +401,7 @@ class _RemessasPageState extends State<RemessasPage> {
     }
     setState(() {
       remessa.status = novoStatus;
-      remessa.progresso = novoStatus == 'Entregue' ? 1 : remessa.progresso;
+      remessa.progresso = shipmentProgress(status: novoStatus);
     });
   }
 
@@ -1674,7 +1681,7 @@ class _RemessaCardState extends State<_RemessaCard> {
                   Row(
                     children: [
                       const Text(
-                        "Progresso da entrega",
+                        "Progresso pela etapa",
                         style: TextStyle(
                           color: Color(0xFF94A3B8),
                           fontSize: 9,
@@ -1993,6 +2000,56 @@ class _SincronizacaoDaEntregaState extends State<_SincronizacaoDaEntrega> {
 class _DetalhesRemessaState extends State<DetalhesRemessa> {
   Remessa get remessa => widget.remessa;
   bool _atualizandoStatus = false;
+  Timer? _timerProgresso;
+
+  @override
+  void initState() {
+    super.initState();
+    _timerProgresso = Timer.periodic(const Duration(seconds: 30), (_) {
+      _atualizarProgresso();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timerProgresso?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _atualizarProgresso() async {
+    try {
+      final itens = await ApiService.instance.minhasRemessas(
+        forceRefresh: true,
+      );
+      final id = '${remessa.id ?? remessa.codigo}';
+      Map? atual;
+      for (final item in itens.whereType<Map>()) {
+        final itemId =
+            '${item['id'] ?? item['remessa_id'] ?? item['shipment_id'] ?? item['uuid'] ?? item['codigo'] ?? item['codigo_rastreio'] ?? item['code'] ?? item['tracking_code']}';
+        if (itemId == id || itemId == remessa.codigo) {
+          atual = item;
+          break;
+        }
+      }
+      if (!mounted || atual == null) return;
+      final rawStatus =
+          atual['status'] ?? atual['situacao'] ?? atual['status_name'];
+      final status = rawStatus is Map
+          ? rawStatus['nome'] ?? rawStatus['name'] ?? rawStatus['status']
+          : rawStatus;
+      final progress =
+          atual['progresso'] ?? atual['progress'] ?? atual['percentual'];
+      setState(() {
+        if (status != null) remessa.status = '$status';
+        remessa.progresso = shipmentProgress(
+          status: status ?? remessa.status,
+          apiProgress: progress,
+        );
+      });
+    } catch (_) {
+      // Mantém o último progresso recebido quando não há conexão.
+    }
+  }
 
   Future<void> _ligarSuporte() async {
     showModalBottomSheet<void>(

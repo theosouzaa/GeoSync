@@ -9,6 +9,7 @@ class AppSession {
 
   static String _email = '';
   static String _nome = '';
+  static String? _fotoPerfil;
   static String _token = '';
   static String _tipoUsuario = 'Cliente';
   static bool _restaurada = false;
@@ -46,6 +47,7 @@ class AppSession {
   static String get token => _token;
   static String get nome => _nome;
   static String get email => _email;
+  static String? get fotoPerfil => _fotoPerfil;
   static String get inicialNome {
     final fonte = _nome.trim().isNotEmpty ? _nome.trim() : _email.trim();
     return fonte.isEmpty ? 'U' : fonte.substring(0, 1).toUpperCase();
@@ -146,6 +148,7 @@ class AppSession {
       'user_type',
       'user_email',
       'user_name',
+      'profile_photo',
       'motorista_veiculo',
     ]) {
       try {
@@ -162,6 +165,7 @@ class AppSession {
     _tipoUsuario = await _lerDadoSeguro(prefs, 'user_type') ?? 'Cliente';
     _email = await _lerDadoSeguro(prefs, 'user_email') ?? '';
     _nome = await _lerDadoSeguro(prefs, 'user_name') ?? '';
+    _fotoPerfil = await _lerDadoSeguro(prefs, 'profile_photo');
     modoEscuro.value = prefs.getBool('dark_mode') ?? false;
     notificacoesAtivas.value = prefs.getBool('notificacoes_ativas') ?? true;
     configuracoesMotorista.value = ConfiguracoesMotorista(
@@ -182,17 +186,23 @@ class AppSession {
     required String tipoUsuario,
     String? email,
     String? nome,
+    String? fotoPerfil,
   }) async {
     _token = token;
     _tipoUsuario = tipoUsuario;
     _email = email ?? _email;
     _nome = nome ?? _nome;
+    _fotoPerfil = fotoPerfil ?? _fotoPerfil;
     await _gravarToken(token);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await _gravarDadoSeguro('user_type', tipoUsuario);
     if (_email.isNotEmpty) await _gravarDadoSeguro('user_email', _email);
     if (_nome.isNotEmpty) await _gravarDadoSeguro('user_name', _nome);
+    if (_fotoPerfil != null && _fotoPerfil!.isNotEmpty) {
+      await prefs.setString('profile_photo', _fotoPerfil!);
+      await _gravarDadoSeguro('profile_photo', _fotoPerfil!);
+    }
     sessaoAtualizada.value++;
   }
 
@@ -200,11 +210,13 @@ class AppSession {
     _token = '';
     _email = '';
     _nome = '';
+    _fotoPerfil = null;
     final prefs = await SharedPreferences.getInstance();
     await _apagarToken(prefs);
     await prefs.remove('user_type');
     await prefs.remove('user_email');
     await prefs.remove('user_name');
+    await prefs.remove('profile_photo');
     await _apagarDadosSeguros();
     sessaoAtualizada.value++;
   }
@@ -218,6 +230,23 @@ class AppSession {
     _email = email;
     await _gravarDadoSeguro('user_name', nome);
     await _gravarDadoSeguro('user_email', email);
+  }
+
+  static Future<void> definirFotoPerfil(String? caminho) async {
+    _fotoPerfil = caminho?.trim().isEmpty == true ? null : caminho?.trim();
+    final prefs = await SharedPreferences.getInstance();
+    if (_fotoPerfil == null) {
+      await prefs.remove('profile_photo');
+      try {
+        await _cofre.delete(key: '${_dadosPrefixo}profile_photo');
+      } catch (error) {
+        debugPrint('[Sessão] não foi possível remover a foto salva: $error');
+      }
+    } else {
+      await prefs.setString('profile_photo', _fotoPerfil!);
+      await _gravarDadoSeguro('profile_photo', _fotoPerfil!);
+    }
+    sessaoAtualizada.value++;
   }
 
   static Future<void> salvarVeiculo(VeiculoMotorista veiculo) async {

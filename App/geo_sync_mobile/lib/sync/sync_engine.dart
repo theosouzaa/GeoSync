@@ -190,7 +190,7 @@ class SyncEngine {
         'GET',
         'remessas/minhas',
         query: {
-          if (incremental) 'updated_since': cursor!,
+          if (incremental) 'updated_since': cursor,
           'per_page': 100,
           'page': pagina,
         },

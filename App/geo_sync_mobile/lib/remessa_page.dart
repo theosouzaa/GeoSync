@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:mobile/services/api_exception.dart';
 import 'package:mobile/services/api_service.dart';
+import 'package:mobile/services/shipment_progress.dart';
 import 'package:mobile/mapa_page.dart';
 import 'package:mobile/suporte_page.dart';
 import 'package:mobile/widgets/data_state_widgets.dart';
@@ -37,6 +40,7 @@ class _RemessasPageState extends State<RemessasPage> {
   final List<Remessa> remessas = [];
   bool _carregando = true;
   String? _erro;
+  Timer? _timerRemessas;
 
   List<Remessa> get remessasFiltradas {
     final pesquisa = _normalizarTexto(_searchController.text);
@@ -71,6 +75,10 @@ class _RemessasPageState extends State<RemessasPage> {
       setState(() {});
     });
     _carregarRemessas();
+    _timerRemessas = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _carregarRemessas(),
+    );
   }
 
   Future<void> _carregarRemessas() async {
@@ -107,11 +115,12 @@ class _RemessasPageState extends State<RemessasPage> {
   }
 
   Remessa _remessaFromApi(Map value) {
-    final progresso = value['progresso'] ?? value['progress'] ?? 0;
+    final status = '${value['status'] ?? value['situacao'] ?? 'Aguardando coleta'}';
     return Remessa(
       id: value['id'] ?? value['remessa_id'],
-      codigo: '${value['codigo'] ?? value['code'] ?? value['id'] ?? '-'}',
-      status: '${value['status'] ?? value['situacao'] ?? 'Aguardando coleta'}',
+      codigo:
+          '${value['codigo_rastreio'] ?? value['codigo'] ?? value['code'] ?? value['id'] ?? '-'}',
+      status: status,
       origem: '${value['origem'] ?? value['origin'] ?? '-'}',
       destino: '${value['destino'] ?? value['destination'] ?? '-'}',
       tipo: '${value['tipo'] ?? value['tipo_carga'] ?? value['cargo'] ?? '-'}',
@@ -121,7 +130,10 @@ class _RemessasPageState extends State<RemessasPage> {
             value['eta'] ??
             value['estimated_delivery_at'],
       ),
-      progresso: progresso is num ? progresso.toDouble().clamp(0.0, 1.0) : 0,
+      progresso: shipmentProgress(
+        status: status,
+        apiProgress: value['progresso'] ?? value['progress'],
+      ),
       atualizadoEm: DateTime.tryParse(
         '${value['updated_at'] ?? value['updatedAt'] ?? ''}',
       ),
@@ -143,6 +155,7 @@ class _RemessasPageState extends State<RemessasPage> {
 
   @override
   void dispose() {
+    _timerRemessas?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -908,7 +921,7 @@ class _RemessaCardState extends State<RemessaCard> {
               Row(
                 children: [
                   Text(
-                    "Progresso da entrega",
+                    "Progresso pela etapa",
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                   ),
                   const Spacer(),

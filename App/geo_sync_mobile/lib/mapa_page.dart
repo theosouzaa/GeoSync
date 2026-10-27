@@ -50,7 +50,7 @@ class _MapaPageState extends State<MapaPage>
     _carregarLocalizacoes();
   }
 
-  Future<void> _carregarLocalizacoes() async {
+  Future<bool> _carregarLocalizacoes() async {
     if (mounted) {
       setState(() {
         _carregandoLocalizacoes = true;
@@ -60,7 +60,7 @@ class _MapaPageState extends State<MapaPage>
     try {
       final resposta = await ApiService.instance.remessasAutorizadas();
       final dados = resposta.whereType<Map>().map(_rotaFromApi).toList();
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _rotas
           ..clear()
@@ -74,6 +74,7 @@ class _MapaPageState extends State<MapaPage>
       if (dados.isNotEmpty && dados.first.id != null) {
         await _carregarRota(dados.first);
       }
+      return _erroLocalizacoes == null;
     } on ApiException catch (error) {
       if (mounted) {
         setState(() {
@@ -81,6 +82,7 @@ class _MapaPageState extends State<MapaPage>
           _carregandoLocalizacoes = false;
         });
       }
+      return false;
     }
   }
 
@@ -92,10 +94,33 @@ class _MapaPageState extends State<MapaPage>
       longitude >= -180 &&
       longitude <= 180;
 
+  String _dataCompacta(Object? valor) {
+    final texto = '${valor ?? ''}'.trim();
+    final apenasData = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(texto);
+    if (apenasData != null) {
+      return '${apenasData.group(3)}/${apenasData.group(2)}';
+    }
+    final data = DateTime.tryParse(texto);
+    if (data == null) return texto.isEmpty ? '-' : texto;
+    final local = data.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _normalizarStatus(Object? valor) => '${valor ?? ''}'
+      .trim()
+      .toLowerCase()
+      .replaceAll('\u00e1', 'a')
+      .replaceAll('\u00e3', 'a')
+      .replaceAll('\u00e2', 'a')
+      .replaceAll('\u00e7', 'c');
+
   RotaModel _rotaFromApi(Map value) {
-    final latitude =
-        value['destino_latitude'] ?? value['latitude'] ?? value['lat'];
+    final latitude = value['latitude_destino'] ??
+        value['destino_latitude'] ??
+        value['latitude'] ??
+        value['lat'];
     final longitude =
+        value['longitude_destino'] ??
         value['destino_longitude'] ??
         value['longitude'] ??
         value['lng'] ??
@@ -109,14 +134,15 @@ class _MapaPageState extends State<MapaPage>
         ? 0.5
         : ((90 - latitudeValue) / 180).clamp(0.12, 0.88);
     final status = '${value['status'] ?? 'Status não informado'}';
-    final cor = status.toLowerCase().contains('alerta')
+    final statusNormalizado = _normalizarStatus(status);
+    final cor = statusNormalizado.contains('alerta')
         ? const Color(0xFFEF4444)
-        : status.toLowerCase().contains('atras')
+        : statusNormalizado.contains('atras')
         ? const Color(0xFFF59E0B)
         : const Color(0xFF64748B);
     return RotaModel(
       codigo:
-          '${value['codigo'] ?? value['code'] ?? value['tracking_code'] ?? value['remessa_codigo'] ?? value['id'] ?? '-'}',
+          '${value['codigo_rastreio'] ?? value['codigo'] ?? value['code'] ?? value['tracking_code'] ?? value['remessa_codigo'] ?? value['id'] ?? '-'}',
       origem:
           '${value['origem'] ?? value['origin'] ?? value['origem_endereco'] ?? '-'}',
       destino:
@@ -126,10 +152,15 @@ class _MapaPageState extends State<MapaPage>
       status: status,
       cor: cor,
       velocidade: '${value['velocidade'] ?? '-'}',
-      atualizacao:
-          '${value['registrado_em'] ?? value['updated_at'] ?? value['created_at'] ?? '-'}',
-      previsao: '${value['previsao'] ?? value['eta'] ?? '-'}',
-      motorista: '${value['motorista'] ?? value['motorista_nome'] ?? '-'}',
+      atualizacao: _dataCompacta(
+        value['registrado_em'] ?? value['updated_at'] ?? value['created_at'],
+      ),
+      previsao: _dataCompacta(
+        value['previsao_entrega'] ?? value['previsao'] ?? value['eta'],
+      ),
+      motorista: value['motorista'] is Map
+          ? '${(value['motorista'] as Map)['name'] ?? (value['motorista'] as Map)['nome'] ?? '-'}'
+          : '${value['motorista'] ?? value['motorista_nome'] ?? '-'}',
       posicao: Offset(x.toDouble(), y.toDouble()),
       latitude: latitudeValue,
       longitude: longitudeValue,
@@ -153,8 +184,8 @@ class _MapaPageState extends State<MapaPage>
       return _rotas
           .where(
             (rota) =>
-                rota.status.toLowerCase().contains('alerta') ||
-                rota.status.toLowerCase().contains('atras'),
+                _normalizarStatus(rota.status).contains('alerta') ||
+                _normalizarStatus(rota.status).contains('atras'),
           )
           .toList();
     }
@@ -163,8 +194,8 @@ class _MapaPageState extends State<MapaPage>
       return _rotas
           .where(
             (rota) =>
-                rota.status.toLowerCase().contains('transito') ||
-                rota.status.toLowerCase().contains('rota'),
+                _normalizarStatus(rota.status).contains('transito') ||
+                _normalizarStatus(rota.status).contains('rota'),
           )
           .toList();
     }
@@ -175,17 +206,17 @@ class _MapaPageState extends State<MapaPage>
   int get _emTransito => _rotas
       .where(
         (rota) =>
-            rota.status.toLowerCase().contains('transito') ||
-            rota.status.toLowerCase().contains('rota'),
+            _normalizarStatus(rota.status).contains('transito') ||
+            _normalizarStatus(rota.status).contains('rota'),
       )
       .length;
 
   int get _atrasos => _rotas
-      .where((rota) => rota.status.toLowerCase().contains('atras'))
+      .where((rota) => _normalizarStatus(rota.status).contains('atras'))
       .length;
 
   int get _alertas => _rotas
-      .where((rota) => rota.status.toLowerCase().contains('alerta'))
+      .where((rota) => _normalizarStatus(rota.status).contains('alerta'))
       .length;
 
   RotaModel? get _rotaSelecionada {
@@ -200,7 +231,12 @@ class _MapaPageState extends State<MapaPage>
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: ListView(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await _carregarLocalizacoes();
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
           children: [
             _buildHeader(),
 
@@ -254,6 +290,7 @@ class _MapaPageState extends State<MapaPage>
             else
               ..._rotasFiltradas.map(_buildRouteCard),
           ],
+          ),
         ),
       ),
     );
@@ -283,7 +320,7 @@ class _MapaPageState extends State<MapaPage>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "${_rotas.length} veículos monitorados agora",
+                  "${_rotas.length} remessas no seu rastreamento",
                   style: const TextStyle(
                     color: Color(0xFF64748B),
                     fontSize: 13,
@@ -297,10 +334,19 @@ class _MapaPageState extends State<MapaPage>
           _buildHeaderButton(
             icon: CupertinoIcons.arrow_clockwise,
             onTap: () async {
-              await _carregarLocalizacoes();
+              final atualizou = await _carregarLocalizacoes();
               if (!mounted) return;
+              if (!atualizou) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Não foi possível atualizar o mapa.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                return;
+              }
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
+                SnackBar(
                   behavior: SnackBarBehavior.floating,
                   content: Text("Localizações atualizadas com sucesso."),
                 ),
@@ -1056,6 +1102,8 @@ class _MapaPageState extends State<MapaPage>
                           const SizedBox(height: 4),
                           Text(
                             rota.previsao,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 10,
                               color: Color(0xFF64748B),
@@ -1129,7 +1177,8 @@ class _MapaPageState extends State<MapaPage>
             decoration: BoxDecoration(color: rota.cor, shape: BoxShape.circle),
           ),
           const SizedBox(width: 5),
-          Flexible(
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 96),
             child: Text(
               rota.status,
               maxLines: 1,
@@ -1181,29 +1230,36 @@ class _MapaPageState extends State<MapaPage>
 
   Widget _buildInfo(IconData icon, String value, String label) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: const Color(0xFF64748B), size: 16),
         const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: Color(0xFF334155),
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF334155),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 8,
-                fontWeight: FontWeight.w500,
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 8,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

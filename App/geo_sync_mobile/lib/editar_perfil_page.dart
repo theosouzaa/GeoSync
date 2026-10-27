@@ -15,6 +15,7 @@ class EditarPerfilPage extends StatefulWidget {
     required this.telefone,
     required this.endereco,
     this.fotoBytes,
+    this.fotoUrl,
   });
 
   final String nome;
@@ -22,6 +23,7 @@ class EditarPerfilPage extends StatefulWidget {
   final String telefone;
   final String endereco;
   final Uint8List? fotoBytes;
+  final String? fotoUrl;
 
   @override
   State<EditarPerfilPage> createState() => _EditarPerfilPageState();
@@ -36,6 +38,8 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
   late final TextEditingController _telefone;
   late final TextEditingController _endereco;
   Uint8List? _fotoBytes;
+  String? _fotoNomeArquivo;
+  bool _fotoAlterada = false;
 
   @override
   void initState() {
@@ -65,7 +69,7 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
       _email.text.trim() != widget.email.trim() ||
       _telefone.text != formatarTelefone(widget.telefone) ||
       _endereco.text.trim() != widget.endereco.trim() ||
-      _fotoBytes != widget.fotoBytes;
+      _fotoAlterada;
 
   String get _iniciais {
     final partes = _nome.text.trim().split(RegExp(r'\s+'))
@@ -92,6 +96,8 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
       'telefone': _telefone.text.trim(),
       'endereco': _endereco.text.trim(),
       'fotoBytes': _fotoBytes,
+      'fotoNomeArquivo': _fotoNomeArquivo,
+      'fotoAlterada': _fotoAlterada,
     });
   }
 
@@ -129,7 +135,13 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
       );
       if (imagem == null) return;
       final bytes = await imagem.readAsBytes();
-      if (mounted) setState(() => _fotoBytes = bytes);
+      if (mounted) {
+        setState(() {
+          _fotoBytes = bytes;
+          _fotoNomeArquivo = imagem.name;
+          _fotoAlterada = true;
+        });
+      }
     } catch (_) {
       _mostrarMensagem('Não foi possível carregar a imagem.');
     }
@@ -194,12 +206,16 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
                 'Selecione uma imagem salva',
                 () => _selecionarFoto(ImageSource.gallery),
               ),
-              if (_fotoBytes != null)
+          if (_fotoBytes != null ||
+              (widget.fotoUrl != null && widget.fotoUrl!.isNotEmpty))
                 opcao(
                   CupertinoIcons.trash,
                   'Remover foto',
                   'Voltar a exibir suas iniciais',
-                  () => setState(() => _fotoBytes = null),
+                  () => setState(() {
+                    _fotoBytes = null;
+                    _fotoAlterada = true;
+                  }),
                   cor: scheme.error,
                 ),
               const SizedBox(height: 12),
@@ -385,7 +401,11 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
         TextButton.icon(
           onPressed: _abrirOpcoesFoto,
           icon: const Icon(CupertinoIcons.camera, size: 18),
-          label: Text(_fotoBytes == null ? 'Adicionar foto' : 'Alterar foto'),
+          label: Text(
+            _fotoBytes == null && (widget.fotoUrl?.isNotEmpty != true)
+                ? 'Adicionar foto'
+                : 'Alterar foto',
+          ),
         ),
       ],
     );
@@ -422,9 +442,22 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
                   radius: 50,
                   backgroundColor: scheme.primary.withValues(alpha: 0.12),
                   backgroundImage: _fotoBytes == null
-                      ? null
+                      ? (_fotoAlterada ||
+                                widget.fotoUrl == null ||
+                                widget.fotoUrl!.isEmpty
+                            ? null
+                            : NetworkImage(widget.fotoUrl!))
                       : MemoryImage(_fotoBytes!),
-                  child: _fotoBytes != null
+                  onBackgroundImageError:
+                      _fotoBytes != null ||
+                          (!_fotoAlterada &&
+                              widget.fotoUrl?.isNotEmpty == true)
+                      ? (_, _) {}
+                      : null,
+                  child: _fotoBytes != null ||
+                          (!_fotoAlterada &&
+                              widget.fotoUrl != null &&
+                              widget.fotoUrl!.isNotEmpty)
                       ? null
                       : _iniciais.isEmpty
                       ? Icon(
