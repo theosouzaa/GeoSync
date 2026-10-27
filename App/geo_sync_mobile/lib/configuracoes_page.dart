@@ -67,6 +67,7 @@ class _ConfiguracoesPageState extends State<ConfiguracoesPage> {
               title: 'Configurações',
               subtitle: 'Ajuste o aplicativo do seu jeito',
               icon: CupertinoIcons.slider_horizontal_3,
+              showBackButton: true,
             ),
             Expanded(
               child: ListView(

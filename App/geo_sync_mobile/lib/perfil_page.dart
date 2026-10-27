@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:mobile/editar_perfil_page.dart';
 import 'package:mobile/login_screen.dart';
@@ -537,6 +538,32 @@ class _PerfilClientePageState extends State<PerfilClientePage> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
+                Tooltip(
+                  message: 'Voltar',
+                  child: Material(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () => Navigator.of(context).maybePop(),
+                      child: const SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Icon(
+                          LucideIcons.arrowLeft,
+                          color: Colors.white,
+                          size: 21,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

@@ -51,18 +51,27 @@ class AppGradientHeader extends StatelessWidget {
           if (showBackButton)
             Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: Material(
-                color: Colors.white.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: onBack ?? () => Navigator.of(context).maybePop(),
-                  child: const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: Icon(
-                      LucideIcons.arrowLeft,
-                      color: Colors.white,
-                      size: 20,
+              child: Tooltip(
+                message: 'Voltar',
+                child: Material(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(15),
+                    onTap: onBack ?? () => Navigator.of(context).maybePop(),
+                    child: const SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Icon(
+                        LucideIcons.arrowLeft,
+                        color: Colors.white,
+                        size: 21,
+                      ),
                     ),
                   ),
                 ),
