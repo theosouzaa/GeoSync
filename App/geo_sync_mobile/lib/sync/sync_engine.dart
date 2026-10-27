@@ -177,17 +177,38 @@ class SyncEngine {
         ultimaCompleta != null &&
         agora.difference(ultimaCompleta) < intervaloCompleto;
 
-    final resposta = await _api.requisicao(
-      'GET',
-      'remessas/minhas',
-      query: incremental ? {'updated_since': cursor} : null,
-    );
-    final recebidas = _api
-        .lista(resposta)
-        .whereType<Map>()
-        .map((r) => Map<String, dynamic>.from(r))
-        .where((r) => _id(r) != null)
-        .toList();
+    // A API Laravel pagina a resposta. Buscar apenas a primeira página fazia
+    // o motorista receber no máximo 20 remessas, mesmo quando havia outras.
+    // O parâmetro de página é opcional em APIs compatíveis com o contrato
+    // antigo; sem meta.last_page, encerramos após a primeira resposta.
+    final recebidas = <Map<String, dynamic>>[];
+    var pagina = 1;
+    var ultimaPagina = 1;
+    dynamic resposta;
+    do {
+      resposta = await _api.requisicao(
+        'GET',
+        'remessas/minhas',
+        query: {
+          if (incremental) 'updated_since': cursor!,
+          'per_page': 100,
+          'page': pagina,
+        },
+      );
+      recebidas.addAll(
+        _api
+            .lista(resposta)
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .where((r) => _id(r) != null),
+      );
+      final meta = resposta is Map ? resposta['meta'] : null;
+      final paginaInformada = meta is Map ? meta['last_page'] : null;
+      ultimaPagina = paginaInformada is num
+          ? paginaInformada.toInt()
+          : int.tryParse('$paginaInformada') ?? 1;
+      pagina++;
+    } while (pagina <= ultimaPagina);
 
     final Map<String, Map<String, dynamic>> servidor;
     if (incremental) {
